@@ -197,3 +197,18 @@ Infrastructure-only tasks do not require artificial frontend changes.
 - Keep commit messages concise and conventional-style.
 - Do not perform destructive operations without authorization.
 - Ask before proceeding when a required decision is unresolved.
+
+### Icon Library
+
+- Use `lucide-react` as EduTrack's primary icon library.
+- Import only the icons needed by each component.
+- Use consistent icon sizes:
+  - 16px for compact actions.
+  - 20px for navigation and standard controls.
+  - 24px for larger UI elements.
+- Use Tailwind CSS design tokens for icon colors.
+- Prefer consistent stroke widths and visual alignment.
+- Include visible labels for important navigation and actions.
+- Decorative icons must use `aria-hidden="true"`.
+- Icon-only buttons must have accessible names (`aria-label`).
+- Do not introduce another icon library without approval.

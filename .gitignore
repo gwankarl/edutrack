@@ -9,6 +9,8 @@ test-results/
 .env
 .env.*
 !.env.example
+!frontend/.env.development
+!.env.test.example
 
 *.log
 .DS_Store
