@@ -1,0 +1,9 @@
+{
+  "name": "@edutrack/contracts",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --project tsconfig.json"
+  }
+}
