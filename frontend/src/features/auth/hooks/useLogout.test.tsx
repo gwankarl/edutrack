@@ -28,6 +28,12 @@ describe("useLogout", () => {
     queryClient.setQueryData(["auth", "current-user"], {
       id: "cached-user",
     });
+    queryClient.setQueryData(["teacher-applications", "me", "cached-user"], {
+      application: {
+        id: "cached-application",
+        status: "pending",
+      },
+    });
 
     function Wrapper({ children }: PropsWithChildren) {
       return (
@@ -51,5 +57,8 @@ describe("useLogout", () => {
       }),
     );
     expect(queryClient.getQueryData(["auth", "current-user"])).toBeNull();
+    expect(
+      queryClient.getQueryData(["teacher-applications", "me", "cached-user"]),
+    ).toBeUndefined();
   });
 });

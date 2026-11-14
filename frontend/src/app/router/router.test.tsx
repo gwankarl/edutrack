@@ -17,6 +17,18 @@ describe("application routes", () => {
     expect(matches?.at(-1)?.route.path).toBe(expectedPath);
   });
 
+  it.each([
+    ["/teacher/apply", "teacher/apply"],
+    ["/teacher/application-status", "teacher/application-status"],
+  ])("protects the %s route", (pathname, expectedPath) => {
+    const matches = matchRoutes(routeConfig, pathname);
+
+    expect(matches?.at(-1)?.route.path).toBe(expectedPath);
+    expect(
+      matches?.some((match) => match.route.Component === ProtectedRoute),
+    ).toBe(true);
+  });
+
   it("preserves Home and the Not Found route", () => {
     expect(matchRoutes(routeConfig, "/")).not.toBeNull();
 

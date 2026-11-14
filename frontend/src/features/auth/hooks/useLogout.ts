@@ -10,7 +10,11 @@ export function useLogout() {
     mutationFn: () => logoutUser(),
     onSuccess: async () => {
       await queryClient.cancelQueries({ queryKey: currentUserQueryKey });
+      await queryClient.cancelQueries({
+        queryKey: ["teacher-applications"],
+      });
       queryClient.setQueryData(currentUserQueryKey, null);
+      queryClient.removeQueries({ queryKey: ["teacher-applications"] });
     },
   });
 }

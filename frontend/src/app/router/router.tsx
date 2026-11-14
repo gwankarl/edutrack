@@ -8,6 +8,8 @@ import ResetPasswordPage from "../../features/auth/pages/ResetPasswordPage.js";
 import VerifyEmailPage from "../../features/auth/pages/VerifyEmailPage.js";
 import LoginPage from "../../features/auth/pages/LoginPage.js";
 import ProfilePage from "../../features/account/pages/ProfilePage.js";
+import TeacherApplicationPage from "../../features/teacher-applications/pages/TeacherApplicationPage.js";
+import TeacherApplicationStatusPage from "../../features/teacher-applications/pages/TeacherApplicationStatusPage.js";
 import AppLayout from "../layouts/AppLayout.js";
 import HomePage from "./HomePage.js";
 import NotFoundPage from "./NotFoundPage.js";
@@ -51,6 +53,14 @@ export const routeConfig: RouteObject[] = [
           {
             path: "profile",
             Component: ProfilePage,
+          },
+          {
+            path: "teacher/apply",
+            Component: TeacherApplicationPage,
+          },
+          {
+            path: "teacher/application-status",
+            Component: TeacherApplicationStatusPage,
           },
         ],
       },
