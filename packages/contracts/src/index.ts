@@ -49,4 +49,18 @@ export {
   type TeacherApplicationStatus,
 } from "./teacher-applications/application.js";
 
+export {
+  ADMIN_TEACHER_APPLICATION_DEFAULT_PAGE,
+  ADMIN_TEACHER_APPLICATION_DEFAULT_PAGE_SIZE,
+  ADMIN_TEACHER_APPLICATION_MAX_PAGE_SIZE,
+  adminTeacherApplicationListQuerySchema,
+  adminTeacherApplicationParamsSchema,
+  adminTeacherApplicationResponseSchema,
+  adminTeacherApplicationListResponseSchema,
+  type AdminTeacherApplicationListQuery,
+  type AdminTeacherApplicationParams,
+  type AdminTeacherApplicationResponse,
+  type AdminTeacherApplicationListResponse,
+} from "./teacher-applications/admin.js";
+
 export { healthResponseSchema, type HealthResponse } from "./system/health.js";

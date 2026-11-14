@@ -5,6 +5,7 @@ import type { AppDependencies } from "./create-app.js";
 import { healthRoute } from "../modules/health/health-route.js";
 import { identityRoutes } from "../modules/identity/identity.routes.js";
 import { teacherApplicationRoutes } from "../modules/teachers/teacher-application.routes.js";
+import { teacherApplicationReviewRoutes } from "../modules/teachers/teacher-application-review.routes.js";
 
 export async function registerModules(
   app: FastifyInstance,
@@ -20,6 +21,11 @@ export async function registerModules(
   });
 
   await app.register(teacherApplicationRoutes, {
+    prefix: "/api/v1",
+    environment,
+  });
+
+  await app.register(teacherApplicationReviewRoutes, {
     prefix: "/api/v1",
     environment,
   });
