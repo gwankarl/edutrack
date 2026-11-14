@@ -46,13 +46,14 @@ async function insertApplication(
     status?: "pending" | "approved" | "rejected";
     reviewedAt?: Date | null;
     reviewedBy?: string | null;
+    rejectionReason?: string | null;
     reviewNotes?: string | null;
   } = {},
 ): Promise<void> {
   await pool.query(
     `INSERT INTO teacher_applications
-       (user_id, motivation, qualifications, status, reviewed_at, reviewed_by, review_notes)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+       (user_id, motivation, qualifications, status, reviewed_at, reviewed_by, rejection_reason, review_notes)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [
       userId,
       "I want to support learners.",
@@ -60,6 +61,7 @@ async function insertApplication(
       fields.status ?? "pending",
       fields.reviewedAt ?? null,
       fields.reviewedBy ?? null,
+      fields.rejectionReason ?? null,
       fields.reviewNotes ?? null,
     ],
   );
@@ -90,11 +92,12 @@ describe("teacher application and profile database schemas", () => {
         submitted_at: Date;
         reviewed_at: Date | null;
         reviewed_by: string | null;
+        rejection_reason: string | null;
         review_notes: string | null;
       }>(
         `INSERT INTO teacher_applications (user_id, motivation, qualifications)
          VALUES ($1, $2, $3)
-         RETURNING id, status, submitted_at, reviewed_at, reviewed_by, review_notes`,
+         RETURNING id, status, submitted_at, reviewed_at, reviewed_by, rejection_reason, review_notes`,
         [
           userId,
           "I want to support learners.",
@@ -106,6 +109,7 @@ describe("teacher application and profile database schemas", () => {
         status: "pending",
         reviewed_at: null,
         reviewed_by: null,
+        rejection_reason: null,
         review_notes: null,
       });
       expect(result.rows[0].id).toEqual(expect.any(String));
@@ -130,7 +134,8 @@ describe("teacher application and profile database schemas", () => {
         status: "rejected",
         reviewedAt,
         reviewedBy: reviewerId,
-        reviewNotes: "Please provide more relevant teaching experience.",
+        rejectionReason: "Please provide more relevant teaching experience.",
+        reviewNotes: "Internal synthetic review note.",
       });
 
       const result = await pool.query<{ status: string; count: string }>(
@@ -185,7 +190,7 @@ describe("teacher application and profile database schemas", () => {
           status: "rejected",
           reviewedAt: new Date(),
           reviewedBy: userId,
-          reviewNotes: "   ",
+          rejectionReason: "   ",
         }),
         "23514",
       );

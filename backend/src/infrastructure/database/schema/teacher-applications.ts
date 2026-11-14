@@ -41,6 +41,7 @@ export const teacherApplications = pgTable(
     reviewedBy: uuid("reviewed_by").references(() => users.id, {
       onDelete: "restrict",
     }),
+    rejectionReason: text("rejection_reason"),
     reviewNotes: text("review_notes"),
   },
   (table) => [
@@ -66,17 +67,19 @@ export const teacherApplications = pgTable(
         ${table.status} = 'pending'
         AND ${table.reviewedAt} IS NULL
         AND ${table.reviewedBy} IS NULL
+        AND ${table.rejectionReason} IS NULL
         AND ${table.reviewNotes} IS NULL
       ) OR (
         ${table.status} = 'approved'
         AND ${table.reviewedAt} IS NOT NULL
         AND ${table.reviewedBy} IS NOT NULL
+        AND ${table.rejectionReason} IS NULL
       ) OR (
         ${table.status} = 'rejected'
         AND ${table.reviewedAt} IS NOT NULL
         AND ${table.reviewedBy} IS NOT NULL
-        AND ${table.reviewNotes} IS NOT NULL
-        AND length(btrim(${table.reviewNotes})) > 0
+        AND ${table.rejectionReason} IS NOT NULL
+        AND length(btrim(${table.rejectionReason})) > 0
       )`,
     ),
   ],

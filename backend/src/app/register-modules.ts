@@ -4,6 +4,7 @@ import type { Environment } from "../infrastructure/config/env.js";
 import type { AppDependencies } from "./create-app.js";
 import { healthRoute } from "../modules/health/health-route.js";
 import { identityRoutes } from "../modules/identity/identity.routes.js";
+import { teacherApplicationRoutes } from "../modules/teachers/teacher-application.routes.js";
 
 export async function registerModules(
   app: FastifyInstance,
@@ -16,5 +17,10 @@ export async function registerModules(
     prefix: "/api/v1",
     environment,
     emailTransportFactory: dependencies.emailTransportFactory,
+  });
+
+  await app.register(teacherApplicationRoutes, {
+    prefix: "/api/v1",
+    environment,
   });
 }

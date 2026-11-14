@@ -9,6 +9,7 @@ export default defineConfig({
       "src/modules/identity/identity.routes.integration.test.ts",
       "src/modules/identity/verification-token.repository.integration.test.ts",
       "tests/integration/**/*.integration.test.ts",
+      "src/modules/teachers/teacher-application.repository.integration.test.ts",
     ],
     setupFiles: ["./tests/integration/setup.ts"],
     testTimeout: 15_000,

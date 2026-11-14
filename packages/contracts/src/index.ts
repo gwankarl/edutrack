@@ -38,4 +38,15 @@ export {
   type CurrentUserRole,
 } from "./identity/current-user.js";
 
+export {
+  getMyTeacherApplicationResponseSchema,
+  submitTeacherApplicationRequestSchema,
+  teacherApplicationResponseSchema,
+  teacherApplicationStatusSchema,
+  type GetMyTeacherApplicationResponse,
+  type SubmitTeacherApplicationRequest,
+  type TeacherApplicationResponse,
+  type TeacherApplicationStatus,
+} from "./teacher-applications/application.js";
+
 export { healthResponseSchema, type HealthResponse } from "./system/health.js";

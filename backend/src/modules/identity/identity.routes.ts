@@ -56,6 +56,7 @@ import {
 } from "./login.service.js";
 import { createSessionRepository } from "./session.repository.js";
 import { createSessionService } from "./session.service.js";
+import { createCookieMutationGuard } from "../../shared/authorization/cookie-mutation-guard.js";
 
 type RegistrationService = Pick<
   ReturnType<typeof createIdentityService>,
@@ -223,50 +224,6 @@ function publicMutationGuard(frontendOrigin: string) {
   };
 }
 
-function cookieMutationGuard(frontendOrigin: string, requireJson: boolean) {
-  return async (
-    request: FastifyRequest,
-    reply: FastifyReply,
-  ): Promise<FastifyReply | void> => {
-    const origin = request.headers.origin;
-    const fetchSite = request.headers["sec-fetch-site"];
-    let originIsAllowed = false;
-
-    if (origin !== undefined) {
-      try {
-        originIsAllowed = new URL(origin).origin === frontendOrigin;
-      } catch {
-        originIsAllowed = false;
-      }
-    }
-
-    if (!originIsAllowed || fetchSite === "cross-site") {
-      return sendProblem(reply, {
-        type: "urn:edutrack:problem:csrf-rejected",
-        title: "Request rejected",
-        status: 403,
-        detail: "The request origin is not allowed.",
-      });
-    }
-
-    if (requireJson) {
-      const contentType = request.headers["content-type"]
-        ?.split(";")[0]
-        ?.trim()
-        .toLowerCase();
-
-      if (contentType !== "application/json") {
-        return sendProblem(reply, {
-          type: "urn:edutrack:problem:unsupported-media-type",
-          title: "Unsupported media type",
-          status: 415,
-          detail: "Requests must use application/json.",
-        });
-      }
-    }
-  };
-}
-
 function createRouteServices(
   app: FastifyInstance,
   environment: Environment,
@@ -344,8 +301,8 @@ export const identityRoutes: FastifyPluginAsync<IdentityRouteOptions> = async (
     createRouteServices(app, environment, emailTransportFactory);
   const frontendOrigin = new URL(environment.FRONTEND_URL).origin;
   const guard = publicMutationGuard(frontendOrigin);
-  const loginGuard = cookieMutationGuard(frontendOrigin, true);
-  const logoutGuard = cookieMutationGuard(frontendOrigin, false);
+  const loginGuard = createCookieMutationGuard(frontendOrigin, true);
+  const logoutGuard = createCookieMutationGuard(frontendOrigin, false);
 
   app.get(
     "/auth/me",
