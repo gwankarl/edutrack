@@ -38,3 +38,5 @@ export const roleAssignments = pgTable(
     index("role_assignments_role_idx").on(table.role),
   ],
 );
+
+export type UserRole = (typeof roleAssignments.$inferSelect)["role"];

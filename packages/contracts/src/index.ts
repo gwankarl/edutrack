@@ -31,4 +31,11 @@ export {
   type LogoutResponse,
 } from "./identity/login.js";
 
+export {
+  currentUserResponseSchema,
+  currentUserRoleSchema,
+  type CurrentUserResponse,
+  type CurrentUserRole,
+} from "./identity/current-user.js";
+
 export { healthResponseSchema, type HealthResponse } from "./system/health.js";

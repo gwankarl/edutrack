@@ -5,6 +5,7 @@ import type {
   FastifyInstance,
   FastifyReply,
   FastifyRequest,
+  preHandlerHookHandler,
 } from "fastify";
 
 import type { Environment } from "../../infrastructure/config/env.js";
@@ -19,6 +20,7 @@ import {
   type EmailService,
   type EmailTransportFactory,
 } from "../../infrastructure/email/email.service.js";
+import { createAuthenticate } from "../../shared/authorization/authenticate.js";
 import {
   createIdentityRepository,
   DuplicateEmailError,
@@ -38,6 +40,7 @@ import {
 import {
   forgotPasswordRequestSchema,
   forgotPasswordResponseSchema,
+  currentUserResponseSchema,
   loginRequestSchema,
   loginResponseSchema,
   logoutResponseSchema,
@@ -58,6 +61,10 @@ type RegistrationService = Pick<
   ReturnType<typeof createIdentityService>,
   "register"
 >;
+type CurrentUserService = Pick<
+  ReturnType<typeof createIdentityService>,
+  "getCurrentUser"
+>;
 type EmailVerificationService = Pick<
   ReturnType<typeof createEmailVerificationService>,
   "verifyEmail"
@@ -74,6 +81,8 @@ type SessionService = Pick<
 
 export interface IdentityRouteServices {
   registration: RegistrationService;
+  currentUser: CurrentUserService;
+  authenticate: preHandlerHookHandler;
   emailVerification: EmailVerificationService;
   passwordRecovery: PasswordRecoveryService;
   login: LoginService;
@@ -288,11 +297,19 @@ function createRouteServices(
     frontendUrl: environment.FRONTEND_URL,
   });
 
+  const identityService = createIdentityService({
+    repository,
+    hashPassword,
+    emailVerificationService,
+  });
+
   return {
-    registration: createIdentityService({
-      repository,
-      hashPassword,
-      emailVerificationService,
+    registration: identityService,
+    currentUser: identityService,
+    authenticate: createAuthenticate({
+      environment,
+      sessionService,
+      identityRepository: repository,
     }),
     emailVerification: emailVerificationService,
     passwordRecovery: createPasswordRecoveryService({
@@ -329,6 +346,38 @@ export const identityRoutes: FastifyPluginAsync<IdentityRouteOptions> = async (
   const guard = publicMutationGuard(frontendOrigin);
   const loginGuard = cookieMutationGuard(frontendOrigin, true);
   const logoutGuard = cookieMutationGuard(frontendOrigin, false);
+
+  app.get(
+    "/auth/me",
+    { preHandler: services.authenticate },
+    async (request, reply) => {
+      const authContext = request.authContext;
+
+      if (!authContext) {
+        return sendProblem(reply, {
+          type: "urn:edutrack:problem:authentication-required",
+          title: "Authentication required",
+          status: 401,
+          detail: "A valid session is required.",
+        });
+      }
+
+      const currentUser = await services.currentUser.getCurrentUser(
+        authContext.userId,
+      );
+
+      if (!currentUser) {
+        return sendProblem(reply, {
+          type: "urn:edutrack:problem:authentication-required",
+          title: "Authentication required",
+          status: 401,
+          detail: "A valid session is required.",
+        });
+      }
+
+      return reply.code(200).send(currentUserResponseSchema.parse(currentUser));
+    },
+  );
 
   app.post(
     "/auth/login",

@@ -462,4 +462,77 @@ describe("POST /api/v1/auth/register", () => {
       "application/problem+json",
     );
   });
+
+  it("returns the current user from a valid session without sensitive fields", async () => {
+    const email = makeEmail();
+    const password = "synthetic test passphrase";
+    emailsToCleanUp.push(email);
+
+    const registration = await register(email, password);
+    expect(registration.statusCode).toBe(201);
+    const userId = registration.json<{ id: string }>().id;
+
+    const verificationToken = getTokenFromLatestEmail();
+    const verification = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/verify-email",
+      payload: { token: verificationToken },
+    });
+    expect(verification.statusCode).toBe(200);
+
+    await app.db.insert(roleAssignments).values({
+      userId,
+      role: "teacher",
+    });
+
+    const login = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/login",
+      headers: { origin: frontendOrigin },
+      payload: { email, password },
+    });
+    expect(login.statusCode).toBe(200);
+
+    const setCookie = login.headers["set-cookie"];
+    const cookieHeader = Array.isArray(setCookie) ? setCookie[0] : setCookie;
+    expect(cookieHeader).toBeTruthy();
+    const [cookiePair] = cookieHeader!.split(";");
+    const separatorIndex = cookiePair.indexOf("=");
+    const rawSessionToken = decodeURIComponent(
+      cookiePair.slice(separatorIndex + 1),
+    );
+
+    const currentUser = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/me",
+      headers: {
+        cookie: cookiePair,
+        "x-user-role": "administrator",
+        "x-user-id": "spoofed-user-id",
+      },
+    });
+
+    expect(currentUser.statusCode).toBe(200);
+    expect(currentUser.json()).toMatchObject({
+      id: userId,
+      displayName: "Integration Test Student",
+      email,
+      emailVerified: true,
+      accountStatus: "active",
+      roles: expect.arrayContaining(["student", "teacher"]),
+    });
+    expect(currentUser.body).not.toContain("passwordHash");
+    expect(currentUser.body).not.toContain("sessionToken");
+    expect(currentUser.body).not.toContain(rawSessionToken);
+
+    const unauthenticated = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/me",
+    });
+
+    expect(unauthenticated.statusCode).toBe(401);
+    expect(unauthenticated.headers["content-type"]).toContain(
+      "application/problem+json",
+    );
+  });
 });

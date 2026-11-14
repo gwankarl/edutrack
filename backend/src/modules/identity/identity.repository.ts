@@ -1,13 +1,21 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 import type { Database } from "../../infrastructure/database/client.js";
 import { roleAssignments } from "../../infrastructure/database/schema/role-assignments.js";
 import { users } from "../../infrastructure/database/schema/users.js";
+import type { UserRole } from "../../infrastructure/database/schema/role-assignments.js";
 
 const userSelection = {
   id: users.id,
   email: users.email,
   displayName: users.displayName,
+};
+
+const authenticatedUserSelection = {
+  id: users.id,
+  email: users.email,
+  displayName: users.displayName,
+  accountStatus: users.accountStatus,
 };
 
 const loginUserSelection = {
@@ -17,6 +25,14 @@ const loginUserSelection = {
   passwordHash: users.passwordHash,
   accountStatus: users.accountStatus,
   emailVerifiedAt: users.emailVerifiedAt,
+};
+
+const currentUserSelection = {
+  id: users.id,
+  email: users.email,
+  displayName: users.displayName,
+  emailVerifiedAt: users.emailVerifiedAt,
+  accountStatus: users.accountStatus,
 };
 
 export type IdentityLoginUser = Pick<
@@ -33,6 +49,11 @@ export type IdentityUser = Pick<
   typeof users.$inferSelect,
   "id" | "email" | "displayName"
 >;
+
+export type IdentityCurrentUserRecord = IdentityUser & {
+  emailVerifiedAt: Date | null;
+  accountStatus: string;
+};
 
 export type CreateIdentityUserInput = Pick<
   IdentityUser,
@@ -126,6 +147,39 @@ export function createIdentityRepository(database: Database) {
         .select(loginUserSelection)
         .from(users)
         .where(sql`lower(${users.email}) = ${normalizedEmail}`)
+        .limit(1);
+
+      return user ?? null;
+    },
+
+    async findUserById(
+      userId: string,
+    ): Promise<(IdentityUser & { accountStatus: string }) | null> {
+      const [user] = await database
+        .select(authenticatedUserSelection)
+        .from(users)
+        .where(sql`${users.id} = ${userId}`)
+        .limit(1);
+
+      return user ?? null;
+    },
+
+    async findRolesByUserId(userId: string): Promise<UserRole[]> {
+      const assignments = await database
+        .select({ role: roleAssignments.role })
+        .from(roleAssignments)
+        .where(eq(roleAssignments.userId, userId));
+
+      return assignments.map(({ role }) => role);
+    },
+
+    async findCurrentUserById(
+      userId: string,
+    ): Promise<IdentityCurrentUserRecord | null> {
+      const [user] = await database
+        .select(currentUserSelection)
+        .from(users)
+        .where(eq(users.id, userId))
         .limit(1);
 
       return user ?? null;

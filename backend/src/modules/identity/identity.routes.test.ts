@@ -39,6 +39,31 @@ async function createRouteHarness(routeEnvironment: Environment = environment) {
         email: "student@example.test",
       })),
     },
+    currentUser: {
+      getCurrentUser: vi.fn(async () => ({
+        id: safeUserId,
+        displayName: "Synthetic Student",
+        email: "student@example.test",
+        emailVerified: true,
+        accountStatus: "active",
+        roles: ["student", "teacher"] as (
+          "student" | "teacher" | "administrator"
+        )[],
+      })),
+    },
+    authenticate: vi.fn(async (request) => {
+      request.authContext = {
+        userId: safeUserId,
+        user: {
+          id: safeUserId,
+          displayName: "Synthetic Student",
+          email: "student@example.test",
+        },
+        roles: ["student", "teacher"] as (
+          "student" | "teacher" | "administrator"
+        )[],
+      };
+    }),
     emailVerification: {
       verifyEmail: vi.fn(async () => ({
         userId: safeUserId,
@@ -81,6 +106,51 @@ async function createRouteHarness(routeEnvironment: Environment = environment) {
 
 afterEach(async () => {
   await Promise.all(apps.splice(0).map((app) => app.close()));
+});
+
+describe("GET /api/v1/auth/me", () => {
+  it("returns the authenticated user's safe profile and multiple roles", async () => {
+    const { app, services } = await createRouteHarness();
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/me",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      id: safeUserId,
+      displayName: "Synthetic Student",
+      email: "student@example.test",
+      emailVerified: true,
+      accountStatus: "active",
+      roles: ["student", "teacher"],
+    });
+    expect(services.currentUser.getCurrentUser).toHaveBeenCalledWith(
+      safeUserId,
+    );
+    expect(response.body).not.toContain("passwordHash");
+    expect(response.body).not.toContain("sessionToken");
+    expect(response.body).not.toContain(sessionToken);
+  });
+
+  it("returns HTTP 401 when authentication or the current identity is absent", async () => {
+    const { app, services } = await createRouteHarness();
+    vi.mocked(services.currentUser.getCurrentUser).mockResolvedValue(null);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/me",
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.headers["content-type"]).toContain(
+      "application/problem+json",
+    );
+    expect(response.json()).toMatchObject({
+      type: "urn:edutrack:problem:authentication-required",
+      status: 401,
+    });
+  });
 });
 
 describe("identity login and logout routes", () => {

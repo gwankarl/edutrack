@@ -26,7 +26,11 @@ describe("identity registration service", () => {
     };
 
     const service = createIdentityService({
-      repository: { createUser },
+      repository: {
+        createUser,
+        findCurrentUserById: vi.fn(async () => null),
+        findRolesByUserId: vi.fn(async () => []),
+      },
       hashPassword,
       emailVerificationService,
     });
@@ -72,7 +76,11 @@ describe("identity registration service", () => {
     };
 
     const service = createIdentityService({
-      repository: { createUser },
+      repository: {
+        createUser,
+        findCurrentUserById: vi.fn(async () => null),
+        findRolesByUserId: vi.fn(async () => []),
+      },
       hashPassword,
       emailVerificationService,
     });
@@ -103,7 +111,11 @@ describe("identity registration service", () => {
     };
 
     const service = createIdentityService({
-      repository: { createUser },
+      repository: {
+        createUser,
+        findCurrentUserById: vi.fn(async () => null),
+        findRolesByUserId: vi.fn(async () => []),
+      },
       hashPassword,
       emailVerificationService,
     });
@@ -133,6 +145,8 @@ describe("identity registration service", () => {
           email: input.email,
           displayName: input.displayName,
         })),
+        findCurrentUserById: vi.fn(async () => null),
+        findRolesByUserId: vi.fn(async () => []),
       },
       hashPassword: vi.fn(async () => "$argon2id$synthetic-hash"),
       emailVerificationService,
@@ -145,5 +159,83 @@ describe("identity registration service", () => {
         password: "a valid synthetic passphrase",
       }),
     ).rejects.toThrow("Email delivery failed.");
+  });
+});
+
+describe("current-user identity service", () => {
+  it("returns safe current-user data with every assigned role", async () => {
+    const repository = {
+      createUser: vi.fn(),
+      findCurrentUserById: vi.fn(async () => ({
+        id: safeUserId,
+        email: "student@example.test",
+        displayName: "Synthetic Student",
+        emailVerifiedAt: new Date("2026-01-01T00:00:00.000Z"),
+        accountStatus: "active",
+      })),
+      findRolesByUserId: vi.fn(
+        async () => ["student", "teacher"] as ["student", "teacher"],
+      ),
+    };
+    const service = createIdentityService({
+      repository,
+      hashPassword: vi.fn(),
+      emailVerificationService: { sendVerificationEmail: vi.fn() },
+    });
+
+    const result = await service.getCurrentUser(safeUserId);
+
+    expect(result).toEqual({
+      id: safeUserId,
+      email: "student@example.test",
+      displayName: "Synthetic Student",
+      emailVerified: true,
+      accountStatus: "active",
+      roles: ["student", "teacher"],
+    });
+    expect(repository.findCurrentUserById).toHaveBeenCalledWith(safeUserId);
+    expect(repository.findRolesByUserId).toHaveBeenCalledWith(safeUserId);
+    expect(result).not.toHaveProperty("passwordHash");
+    expect(result).not.toHaveProperty("sessionToken");
+  });
+
+  it("reports an unverified email without exposing the verification timestamp", async () => {
+    const repository = {
+      createUser: vi.fn(),
+      findCurrentUserById: vi.fn(async () => ({
+        id: safeUserId,
+        email: "student@example.test",
+        displayName: "Synthetic Student",
+        emailVerifiedAt: null,
+        accountStatus: "active",
+      })),
+      findRolesByUserId: vi.fn(async () => ["student"] as ["student"]),
+    };
+    const service = createIdentityService({
+      repository,
+      hashPassword: vi.fn(),
+      emailVerificationService: { sendVerificationEmail: vi.fn() },
+    });
+
+    await expect(service.getCurrentUser(safeUserId)).resolves.toMatchObject({
+      emailVerified: false,
+      roles: ["student"],
+    });
+  });
+
+  it("returns null when the identity no longer exists", async () => {
+    const repository = {
+      createUser: vi.fn(),
+      findCurrentUserById: vi.fn(async () => null),
+      findRolesByUserId: vi.fn(),
+    };
+    const service = createIdentityService({
+      repository,
+      hashPassword: vi.fn(),
+      emailVerificationService: { sendVerificationEmail: vi.fn() },
+    });
+
+    await expect(service.getCurrentUser(safeUserId)).resolves.toBeNull();
+    expect(repository.findRolesByUserId).not.toHaveBeenCalled();
   });
 });
