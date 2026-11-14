@@ -1,5 +1,11 @@
 import { Link, NavLink } from "react-router";
 
+const navLinkClassName = ({ isActive }: { isActive: boolean }) =>
+  [
+    "inline-flex min-h-11 items-center rounded-sm px-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
+    isActive ? "text-primary" : "text-foreground hover:text-primary",
+  ].join(" ");
+
 export default function Header() {
   return (
     <header className="border-b border-border bg-surface">
@@ -12,20 +18,15 @@ export default function Header() {
           EduTrack
         </Link>
 
-        <nav aria-label="Primary navigation">
-          <NavLink
-            className={({ isActive }) =>
-              [
-                "inline-flex min-h-11 items-center rounded-sm px-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
-                isActive
-                  ? "text-primary"
-                  : "text-foreground hover:text-primary",
-              ].join(" ")
-            }
-            end
-            to="/"
-          >
+        <nav
+          aria-label="Primary navigation"
+          className="flex flex-wrap items-center gap-1"
+        >
+          <NavLink className={navLinkClassName} end to="/">
             Home
+          </NavLink>
+          <NavLink className={navLinkClassName} end to="/register">
+            Register
           </NavLink>
         </nav>
       </div>
