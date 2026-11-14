@@ -1,5 +1,7 @@
 import { Link, NavLink } from "react-router";
 
+import UserMenu from "./UserMenu.js";
+
 const navLinkClassName = ({ isActive }: { isActive: boolean }) =>
   [
     "inline-flex min-h-11 items-center rounded-sm px-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
@@ -18,17 +20,21 @@ export default function Header() {
           EduTrack
         </Link>
 
-        <nav
-          aria-label="Primary navigation"
-          className="flex flex-wrap items-center gap-1"
-        >
-          <NavLink className={navLinkClassName} end to="/">
-            Home
-          </NavLink>
-          <NavLink className={navLinkClassName} end to="/register">
-            Register
-          </NavLink>
-        </nav>
+        <div className="flex w-full flex-wrap items-center justify-between gap-3 sm:w-auto sm:justify-end">
+          <nav
+            aria-label="Primary navigation"
+            className="flex flex-wrap items-center gap-1"
+          >
+            <NavLink className={navLinkClassName} end to="/">
+              Home
+            </NavLink>
+            <NavLink className={navLinkClassName} end to="/register">
+              Register
+            </NavLink>
+          </nav>
+
+          <UserMenu />
+        </div>
       </div>
     </header>
   );

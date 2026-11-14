@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  getCurrentUser,
+  loginUser,
+  logoutUser,
   registerUser,
   requestPasswordReset,
   resetPassword,
@@ -249,6 +252,141 @@ describe("resetPassword", () => {
     await expect(resetPassword(request)).rejects.toMatchObject({
       name: "ApiError",
       status: 400,
+    });
+  });
+});
+
+describe("loginUser", () => {
+  const request = {
+    email: "ada@example.test",
+    password: "a synthetic test passphrase",
+  };
+  const user = {
+    id: "00000000-0000-4000-8000-000000000001",
+    displayName: "Ada Student",
+    email: "ada@example.test",
+  };
+
+  it("posts credentials and returns only the shared safe login response", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(user), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(loginUser(request)).resolves.toEqual(user);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/auth/login",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "same-origin",
+        body: JSON.stringify(request),
+      }),
+    );
+  });
+
+  it("preserves invalid-credentials API errors", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            title: "Authentication failed",
+            status: 401,
+            detail: "The email or password is incorrect.",
+          }),
+          {
+            status: 401,
+            headers: { "Content-Type": "application/problem+json" },
+          },
+        ),
+      ),
+    );
+
+    await expect(loginUser(request)).rejects.toMatchObject({
+      name: "ApiError",
+      status: 401,
+    });
+  });
+});
+
+describe("logoutUser", () => {
+  it("posts with same-origin credentials and returns the shared logout response", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ message: "Logged out." }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(logoutUser()).resolves.toEqual({ message: "Logged out." });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/auth/logout",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "same-origin",
+        body: undefined,
+      }),
+    );
+  });
+});
+
+describe("getCurrentUser", () => {
+  const currentUser = {
+    id: "00000000-0000-4000-8000-000000000001",
+    displayName: "Ada Student",
+    email: "ada@example.test",
+    emailVerified: true,
+    accountStatus: "active",
+    roles: ["student"],
+  };
+
+  it("gets the current user using same-origin credentials", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(currentUser), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getCurrentUser()).resolves.toEqual(currentUser);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/auth/me",
+      expect.objectContaining({
+        method: "GET",
+        credentials: "same-origin",
+      }),
+    );
+  });
+
+  it("preserves HTTP 401 for the hook to treat as unauthenticated", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            title: "Authentication required",
+            status: 401,
+            detail: "A valid session is required.",
+          }),
+          {
+            status: 401,
+            headers: { "Content-Type": "application/problem+json" },
+          },
+        ),
+      ),
+    );
+
+    await expect(getCurrentUser()).rejects.toMatchObject({
+      name: "ApiError",
+      status: 401,
     });
   });
 });

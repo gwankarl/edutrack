@@ -6,9 +6,12 @@ import RegistrationConfirmationPage from "../../features/auth/pages/Registration
 import RegisterPage from "../../features/auth/pages/RegisterPage.js";
 import ResetPasswordPage from "../../features/auth/pages/ResetPasswordPage.js";
 import VerifyEmailPage from "../../features/auth/pages/VerifyEmailPage.js";
+import LoginPage from "../../features/auth/pages/LoginPage.js";
+import ProfilePage from "../../features/account/pages/ProfilePage.js";
 import AppLayout from "../layouts/AppLayout.js";
 import HomePage from "./HomePage.js";
 import NotFoundPage from "./NotFoundPage.js";
+import ProtectedRoute from "./ProtectedRoute.js";
 
 export const routeConfig: RouteObject[] = [
   {
@@ -37,6 +40,19 @@ export const routeConfig: RouteObject[] = [
       {
         path: "reset-password",
         Component: ResetPasswordPage,
+      },
+      {
+        path: "login",
+        Component: LoginPage,
+      },
+      {
+        Component: ProtectedRoute,
+        children: [
+          {
+            path: "profile",
+            Component: ProfilePage,
+          },
+        ],
       },
       {
         path: "*",

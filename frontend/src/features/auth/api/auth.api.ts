@@ -7,6 +7,14 @@ import {
   verifyEmailResponseSchema,
   resetPasswordRequestSchema,
   resetPasswordResponseSchema,
+  loginRequestSchema,
+  loginResponseSchema,
+  logoutResponseSchema,
+  currentUserResponseSchema,
+  type CurrentUserResponse,
+  type LoginRequest,
+  type LoginResponse,
+  type LogoutResponse,
   type ResetPasswordRequest,
   type ResetPasswordResponse,
   type ForgotPasswordRequest,
@@ -96,6 +104,54 @@ export async function resetPassword(
       status: 200,
       title: "Invalid response",
       detail: "The server returned an unexpected password reset response.",
+    });
+  }
+}
+
+export async function loginUser(input: LoginRequest): Promise<LoginResponse> {
+  const request = loginRequestSchema.parse(input);
+  const response = await apiRequest<unknown>("/api/v1/auth/login", {
+    method: "POST",
+    body: request,
+  });
+
+  try {
+    return loginResponseSchema.parse(response);
+  } catch {
+    throw new ApiError({
+      status: 200,
+      title: "Invalid response",
+      detail: "The server returned an unexpected login response.",
+    });
+  }
+}
+
+export async function logoutUser(): Promise<LogoutResponse> {
+  const response = await apiRequest<unknown>("/api/v1/auth/logout", {
+    method: "POST",
+  });
+
+  try {
+    return logoutResponseSchema.parse(response);
+  } catch {
+    throw new ApiError({
+      status: 200,
+      title: "Invalid response",
+      detail: "The server returned an unexpected logout response.",
+    });
+  }
+}
+
+export async function getCurrentUser(): Promise<CurrentUserResponse> {
+  const response = await apiRequest<unknown>("/api/v1/auth/me");
+
+  try {
+    return currentUserResponseSchema.parse(response);
+  } catch {
+    throw new ApiError({
+      status: 200,
+      title: "Invalid response",
+      detail: "The server returned an unexpected current-user response.",
     });
   }
 }

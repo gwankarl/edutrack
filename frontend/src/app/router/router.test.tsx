@@ -1,6 +1,7 @@
 import { matchRoutes } from "react-router";
 import { describe, expect, it } from "vitest";
 
+import ProtectedRoute from "./ProtectedRoute.js";
 import { routeConfig } from "./router.js";
 
 describe("application routes", () => {
@@ -23,9 +24,18 @@ describe("application routes", () => {
     expect(notFoundMatches?.at(-1)?.route.path).toBe("*");
   });
 
-  it("does not define a functional login route yet", () => {
+  it("matches the login route", () => {
     const matches = matchRoutes(routeConfig, "/login");
 
-    expect(matches?.at(-1)?.route.path).toBe("*");
+    expect(matches?.at(-1)?.route.path).toBe("login");
+  });
+
+  it("places Profile under the authenticated route guard", () => {
+    const matches = matchRoutes(routeConfig, "/profile");
+
+    expect(matches?.at(-1)?.route.path).toBe("profile");
+    expect(
+      matches?.some((match) => match.route.Component === ProtectedRoute),
+    ).toBe(true);
   });
 });
