@@ -9,13 +9,29 @@ export function registerErrorHandler(app: FastifyInstance): void {
         ? error.statusCode
         : 500;
 
-    const message = statusCode >= 500 ? "Internal server error" : error.message;
+    const isRateLimited = statusCode === 429;
+    const isServerError = statusCode >= 500;
 
-    void reply.status(statusCode).send({
-      error: {
-        statusCode,
-        message,
-      },
-    });
+    void reply
+      .status(statusCode)
+      .type("application/problem+json")
+      .send({
+        type: isRateLimited
+          ? "urn:edutrack:problem:rate-limit-exceeded"
+          : isServerError
+            ? "urn:edutrack:problem:internal-error"
+            : "urn:edutrack:problem:request-error",
+        title: isRateLimited
+          ? "Too many requests"
+          : isServerError
+            ? "Internal server error"
+            : "Request could not be completed",
+        status: statusCode,
+        detail: isRateLimited
+          ? "Too many requests. Please try again later."
+          : isServerError
+            ? "An unexpected error occurred."
+            : "The request could not be completed.",
+      });
   });
 }

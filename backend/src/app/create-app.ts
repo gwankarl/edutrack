@@ -3,11 +3,19 @@ import Fastify from "fastify";
 import { createDatabase } from "../infrastructure/database/client.js";
 import { createDatabasePool } from "../infrastructure/database/pool.js";
 import type { Environment } from "../infrastructure/config/env.js";
+import type { EmailTransportFactory } from "../infrastructure/email/email.service.js";
 import { createLoggerOptions } from "../infrastructure/logging/logger-options.js";
 import { registerErrorHandler } from "../shared/errors/error-handler.js";
 import { registerModules } from "./register-modules.js";
 
-export async function createApp(environment: Environment) {
+export interface AppDependencies {
+  emailTransportFactory?: EmailTransportFactory;
+}
+
+export async function createApp(
+  environment: Environment,
+  dependencies: AppDependencies = {},
+) {
   const app = Fastify({
     logger: createLoggerOptions(environment),
   });
@@ -20,7 +28,8 @@ export async function createApp(environment: Environment) {
   });
 
   registerErrorHandler(app);
-  await registerModules(app);
+
+  await registerModules(app, environment, dependencies);
 
   return app;
 }

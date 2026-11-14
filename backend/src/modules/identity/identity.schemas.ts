@@ -1,0 +1,18 @@
+export {
+  forgotPasswordRequestSchema,
+  forgotPasswordResponseSchema,
+  registrationRequestSchema,
+  registrationResponseSchema,
+  resetPasswordRequestSchema,
+  resetPasswordResponseSchema,
+  verifyEmailRequestSchema,
+  verifyEmailResponseSchema,
+  type ForgotPasswordRequest,
+  type ForgotPasswordResponse,
+  type RegistrationRequest,
+  type RegistrationResponse,
+  type ResetPasswordRequest,
+  type ResetPasswordResponse,
+  type VerifyEmailRequest,
+  type VerifyEmailResponse,
+} from "@edutrack/contracts";

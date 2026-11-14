@@ -6,6 +6,7 @@ const app = await createApp({
   NODE_ENV: "test",
   HOST: "127.0.0.1",
   PORT: 5000,
+  FRONTEND_URL: "http://localhost:5173",
   DATABASE_URL: "postgresql://edutrack:replace-me@localhost:5432/edutrack_test",
 });
 

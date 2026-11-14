@@ -5,6 +5,9 @@ export default defineConfig({
     environment: "node",
     include: [
       "src/modules/health/health.integration.test.ts",
+      "src/modules/identity/identity.repository.integration.test.ts",
+      "src/modules/identity/identity.routes.integration.test.ts",
+      "src/modules/identity/verification-token.repository.integration.test.ts",
       "tests/integration/**/*.integration.test.ts",
     ],
     setupFiles: ["./tests/integration/setup.ts"],

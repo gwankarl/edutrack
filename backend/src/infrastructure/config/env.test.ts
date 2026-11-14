@@ -14,14 +14,13 @@ describe("loadEnvironment", () => {
       HOST: "127.0.0.1",
       PORT: 5000,
       DATABASE_URL: "postgresql://edutrack:replace-me@localhost:5432/edutrack",
+      FRONTEND_URL: "http://localhost:5173",
     });
   });
 
   it("rejects a database URL with a non-PostgreSQL scheme", () => {
     expect(() =>
-      loadEnvironment({
-        DATABASE_URL: "https://example.com",
-      }),
+      loadEnvironment({ DATABASE_URL: "https://example.com" }),
     ).toThrow();
   });
 });

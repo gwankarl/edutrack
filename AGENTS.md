@@ -175,6 +175,18 @@ repositories/ directories for business-domain code.
 - Report what passed, failed, or was not run.
 - Never claim unexecuted tests passed.
 
+## Testing Priority
+
+- Prioritize unit and integration tests during feature development.
+- Write backend unit tests for business logic and validation.
+- Write backend integration tests for APIs and database operations.
+- Write frontend unit/component tests using Vitest and React Testing Library.
+- Add frontend integration tests where useful.
+- Defer new Playwright E2E tests until the final integration and QA milestone (M8).
+- Preserve existing E2E infrastructure and tests; do not remove them.
+- Do not require E2E test completion to close individual M1–M7 tasks.
+- Continue running relevant lint, typecheck, format, and build checks.
+
 ## Development Workflow
 
 1. Work on one numbered roadmap task at a time.
