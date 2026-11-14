@@ -9,6 +9,7 @@ import { createDatabasePool } from "../../infrastructure/database/pool.js";
 import { users } from "../../infrastructure/database/schema/users.js";
 import { verificationTokens } from "../../infrastructure/database/schema/verification-tokens.js";
 import { createVerificationTokenRepository } from "./verification-token.repository.js";
+import { authSessions } from "../../infrastructure/database/schema/auth-sessions.js";
 
 const pool = createDatabasePool(loadEnvironment());
 const database = createDatabase(pool);
@@ -219,6 +220,139 @@ describe("verification token repository", () => {
       .select({ consumedAt: verificationTokens.consumedAt })
       .from(verificationTokens)
       .where(eq(verificationTokens.tokenHash, tokenHash));
+    expect(token.consumedAt).toBeNull();
+  });
+
+  it("atomically consumes a password-reset token, updates the password, and revokes sessions", async () => {
+    const userId = await createTestUser();
+    const tokenHash = makeTokenHash();
+    const sessionHash = makeTokenHash();
+    const replacementHash = "$argon2id$synthetic-replacement-hash";
+
+    await repository.create({
+      userId,
+      tokenHash,
+      purpose: "password_reset",
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
+
+    await database.insert(authSessions).values({
+      userId,
+      sessionTokenHash: sessionHash,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
+
+    await expect(
+      repository.consumePasswordResetToken(tokenHash, replacementHash),
+    ).resolves.toEqual({ userId });
+
+    const [updatedUser] = await database
+      .select({ passwordHash: users.passwordHash })
+      .from(users)
+      .where(eq(users.id, userId));
+
+    const [session] = await database
+      .select({ revokedAt: authSessions.revokedAt })
+      .from(authSessions)
+      .where(eq(authSessions.sessionTokenHash, sessionHash));
+
+    const [token] = await database
+      .select({ consumedAt: verificationTokens.consumedAt })
+      .from(verificationTokens)
+      .where(eq(verificationTokens.tokenHash, tokenHash));
+
+    expect(updatedUser.passwordHash).toBe(replacementHash);
+    expect(session.revokedAt).toBeInstanceOf(Date);
+    expect(token.consumedAt).toBeInstanceOf(Date);
+
+    // A second attempt cannot reuse the token.
+    await expect(
+      repository.consumePasswordResetToken(tokenHash, "$argon2id$second-hash"),
+    ).resolves.toBeNull();
+  });
+
+  it("rejects expired, consumed, and wrong-purpose password-reset tokens without changing account state", async () => {
+    const userId = await createTestUser();
+    const sessionHash = makeTokenHash();
+    const expiredHash = makeTokenHash();
+    const consumedHash = makeTokenHash();
+    const wrongPurposeHash = makeTokenHash();
+    const originalPasswordHash = "$argon2id$synthetic-integration-test-hash";
+
+    await database.insert(authSessions).values({
+      userId,
+      sessionTokenHash: sessionHash,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
+
+    await database.insert(verificationTokens).values([
+      {
+        userId,
+        tokenHash: expiredHash,
+        purpose: "password_reset",
+        expiresAt: new Date(Date.now() - 60 * 1000),
+      },
+      {
+        userId,
+        tokenHash: consumedHash,
+        purpose: "password_reset",
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        consumedAt: new Date(),
+      },
+      {
+        userId,
+        tokenHash: wrongPurposeHash,
+        purpose: "email_verification",
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      },
+    ]);
+
+    for (const tokenHash of [expiredHash, consumedHash, wrongPurposeHash]) {
+      await expect(
+        repository.consumePasswordResetToken(
+          tokenHash,
+          "$argon2id$replacement-hash",
+        ),
+      ).resolves.toBeNull();
+    }
+
+    const [storedUser] = await database
+      .select({ passwordHash: users.passwordHash })
+      .from(users)
+      .where(eq(users.id, userId));
+
+    const [session] = await database
+      .select({ revokedAt: authSessions.revokedAt })
+      .from(authSessions)
+      .where(eq(authSessions.sessionTokenHash, sessionHash));
+
+    expect(storedUser.passwordHash).toBe(originalPasswordHash);
+    expect(session.revokedAt).toBeNull();
+  });
+
+  it("rolls back token consumption if the account update fails", async () => {
+    const userId = await createTestUser();
+    const tokenHash = makeTokenHash();
+
+    await repository.create({
+      userId,
+      tokenHash,
+      purpose: "password_reset",
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
+
+    await expect(
+      repository.consumePasswordResetToken(
+        tokenHash,
+        null as unknown as string,
+      ),
+    ).rejects.toThrow();
+
+    const [token] = await database
+      .select({ consumedAt: verificationTokens.consumedAt })
+      .from(verificationTokens)
+      .where(eq(verificationTokens.tokenHash, tokenHash));
+
     expect(token.consumedAt).toBeNull();
   });
 });

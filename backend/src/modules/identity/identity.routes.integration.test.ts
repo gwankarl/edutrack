@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { eq, inArray } from "drizzle-orm";
 import {
@@ -13,16 +13,39 @@ import {
 
 import { createApp } from "../../app/create-app.js";
 import { loadEnvironment } from "../../infrastructure/config/env.js";
+import { authSessions } from "../../infrastructure/database/schema/auth-sessions.js";
 import { roleAssignments } from "../../infrastructure/database/schema/role-assignments.js";
 import { users } from "../../infrastructure/database/schema/users.js";
+import { verificationTokens } from "../../infrastructure/database/schema/verification-tokens.js";
+
+const sentEmailTexts: string[] = [];
 
 const app = await createApp(loadEnvironment(), {
-  emailTransportFactory: () => ({ sendMail: vi.fn(async () => undefined) }),
+  emailTransportFactory: () => ({
+    sendMail: vi.fn(async (message) => {
+      sentEmailTexts.push(message.text);
+    }),
+  }),
 });
 const emailsToCleanUp: string[] = [];
 
 function makeEmail(): string {
   return `route-${randomUUID()}@example.test`;
+}
+
+function getTokenFromLatestEmail(): string {
+  const emailText = sentEmailTexts.at(-1);
+  const link = emailText?.match(/https?:\/\/\S+/)?.[0];
+  if (!link) {
+    throw new Error("Expected a verification or reset link in mocked email.");
+  }
+
+  const token = new URL(link).searchParams.get("token");
+  if (!token) {
+    throw new Error("Expected a token in the mocked email link.");
+  }
+
+  return token;
 }
 
 async function register(email: string, password = "synthetic test passphrase") {
@@ -49,6 +72,7 @@ describe("POST /api/v1/auth/register", () => {
   });
 
   afterEach(async () => {
+    sentEmailTexts.length = 0;
     if (emailsToCleanUp.length > 0) {
       await app.db
         .delete(users)
@@ -141,5 +165,146 @@ describe("POST /api/v1/auth/register", () => {
     });
     expect(duplicateResponse.body).not.toContain(password);
     expect(duplicateResponse.body).not.toContain("$argon2id$");
+  });
+
+  it("verifies an email through the API and consumes its token once", async () => {
+    const email = makeEmail();
+    emailsToCleanUp.push(email);
+
+    const registration = await register(email);
+    expect(registration.statusCode).toBe(201);
+    const userId = registration.json<{ id: string }>().id;
+    const token = getTokenFromLatestEmail();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/verify-email",
+      payload: { token },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ message: "Email verified." });
+    expect(response.body).not.toContain(token);
+
+    const [verifiedUser] = await app.db
+      .select({ emailVerifiedAt: users.emailVerifiedAt })
+      .from(users)
+      .where(eq(users.id, userId));
+    const tokenHash = createHash("sha256").update(token).digest("hex");
+    const [storedToken] = await app.db
+      .select({ consumedAt: verificationTokens.consumedAt })
+      .from(verificationTokens)
+      .where(eq(verificationTokens.tokenHash, tokenHash));
+
+    expect(verifiedUser.emailVerifiedAt).toBeInstanceOf(Date);
+    expect(storedToken.consumedAt).toBeInstanceOf(Date);
+
+    const repeatedResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/verify-email",
+      payload: { token },
+    });
+    expect(repeatedResponse.statusCode).toBe(400);
+    expect(repeatedResponse.headers["content-type"]).toContain(
+      "application/problem+json",
+    );
+    expect(repeatedResponse.body).not.toContain(token);
+  });
+
+  it("returns the same forgot-password response for known and unknown emails", async () => {
+    const email = makeEmail();
+    emailsToCleanUp.push(email);
+    await register(email);
+    sentEmailTexts.length = 0;
+
+    const knownResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/forgot-password",
+      payload: { email },
+    });
+    expect(sentEmailTexts).toHaveLength(1);
+
+    const unknownResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/forgot-password",
+      payload: { email: makeEmail() },
+    });
+
+    expect(knownResponse.statusCode).toBe(202);
+    expect(unknownResponse.statusCode).toBe(knownResponse.statusCode);
+    expect(unknownResponse.body).toBe(knownResponse.body);
+    expect(knownResponse.json()).toEqual({
+      message:
+        "If an account exists for that email, a password reset link will be sent.",
+    });
+    expect(sentEmailTexts).toHaveLength(1);
+    expect(knownResponse.body).not.toContain("token");
+  });
+
+  it("resets a password, consumes the token, and revokes existing sessions", async () => {
+    const email = makeEmail();
+    emailsToCleanUp.push(email);
+    const registration = await register(email);
+    const userId = registration.json<{ id: string }>().id;
+    sentEmailTexts.length = 0;
+
+    const forgotResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/forgot-password",
+      payload: { email },
+    });
+    expect(forgotResponse.statusCode).toBe(202);
+    const token = getTokenFromLatestEmail();
+    const sessionTokenHash = createHash("sha256")
+      .update(randomUUID())
+      .digest("hex");
+    await app.db.insert(authSessions).values({
+      userId,
+      sessionTokenHash,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
+
+    const newPassword = "synthetic replacement passphrase";
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/reset-password",
+      payload: { token, newPassword },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ message: "Password has been reset." });
+    expect(response.body).not.toContain(token);
+    expect(response.body).not.toContain(newPassword);
+    expect(response.body).not.toContain("passwordHash");
+
+    const [updatedUser] = await app.db
+      .select({ passwordHash: users.passwordHash })
+      .from(users)
+      .where(eq(users.id, userId));
+    const [session] = await app.db
+      .select({ revokedAt: authSessions.revokedAt })
+      .from(authSessions)
+      .where(eq(authSessions.sessionTokenHash, sessionTokenHash));
+    const tokenHash = createHash("sha256").update(token).digest("hex");
+    const [storedToken] = await app.db
+      .select({ consumedAt: verificationTokens.consumedAt })
+      .from(verificationTokens)
+      .where(eq(verificationTokens.tokenHash, tokenHash));
+
+    expect(updatedUser.passwordHash).toMatch(/^\$argon2id\$/);
+    expect(updatedUser.passwordHash).not.toBe(newPassword);
+    expect(session.revokedAt).toBeInstanceOf(Date);
+    expect(storedToken.consumedAt).toBeInstanceOf(Date);
+
+    const replayResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/reset-password",
+      payload: { token, newPassword: "another synthetic passphrase" },
+    });
+    expect(replayResponse.statusCode).toBe(400);
+    expect(replayResponse.headers["content-type"]).toContain(
+      "application/problem+json",
+    );
+    expect(replayResponse.body).not.toContain(token);
   });
 });
