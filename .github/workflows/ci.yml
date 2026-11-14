@@ -107,6 +107,9 @@ jobs:
         run: |
           printf 'NODE_ENV=%s\nDATABASE_URL=%s\n' "$NODE_ENV" "$DATABASE_URL" > backend/.env.test
 
+      - name: Apply migrations to the isolated test database
+        run: npm run db:migrate --workspace=backend
+
       - name: Run PostgreSQL integration tests
         run: npm run test:integration --workspace=backend
 

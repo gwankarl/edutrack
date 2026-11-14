@@ -2,7 +2,7 @@
 
 EduTrack is a free, teacher-curated, self-paced learning platform for Cameroon's Anglophone general secondary students in Forms 3–5.
 
-The repository contains the initial technical foundation: a React frontend, a Fastify API, shared browser-safe contracts, PostgreSQL/Drizzle infrastructure, and automated checks. Business workflows and business tables have not been implemented yet.
+The repository contains the technical foundation and the first identity workflows: registration, email verification, password recovery, login, server-managed sessions, authorization guards, and a user profile. The frontend, Fastify API, shared contracts, PostgreSQL/Drizzle infrastructure, and automated checks are organized as npm workspaces.
 
 ## Prerequisites
 
@@ -25,7 +25,7 @@ Create a local PostgreSQL login and the development and test databases. For exam
 
 ```sql
 CREATE ROLE edutrack WITH LOGIN PASSWORD 'replace-with-a-local-password';
-CREATE DATABASE edutrack OWNER edutrack;
+CREATE DATABASE edutrack_dev OWNER edutrack;
 CREATE DATABASE edutrack_test OWNER edutrack;
 ```
 
@@ -36,7 +36,15 @@ cp backend/.env.example backend/.env
 cp backend/.env.test.example backend/.env.test
 ```
 
-`backend/.env` points to the local `edutrack` database. `backend/.env.test` must point to `edutrack_test`; the integration-test setup rejects any other database name. These files are ignored by Git. Do not commit credentials.
+`backend/.env` points to the local `edutrack_dev` database. `backend/.env.test` must point to `edutrack_test`; the integration-test setup rejects any other database name. These files are ignored by Git. Do not commit credentials.
+
+Apply the checked-in identity schema migration to your local development database before using registration, sessions, or profile endpoints:
+
+```bash
+npm run db:migrate --workspace=backend
+```
+
+This command uses `backend/.env` and targets `edutrack_dev`. Do not use it for production; production migrations require a separately reviewed deployment procedure.
 
 The development proxy setting is already provided in the tracked [frontend/.env.development](frontend/.env.development). Its default sends `/api/v1` requests to `http://localhost:5000`. Change `API_PROXY_TARGET` there only if the backend uses a different address.
 

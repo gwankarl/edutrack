@@ -432,14 +432,21 @@ export const identityRoutes: FastifyPluginAsync<IdentityRouteOptions> = async (
     },
   );
 
-  app.post("/auth/register", async (request, reply) => {
-    try {
-      const user = await services.registration.register(request.body);
-      return reply.code(201).send(user);
-    } catch (error) {
-      return handleIdentityRouteError(error, reply);
-    }
-  });
+  app.post(
+    "/auth/register",
+    {
+      preHandler: guard,
+      config: { rateLimit: { max: 5, timeWindow: "15 minutes" } },
+    },
+    async (request, reply) => {
+      try {
+        const user = await services.registration.register(request.body);
+        return reply.code(201).send(user);
+      } catch (error) {
+        return handleIdentityRouteError(error, reply);
+      }
+    },
+  );
 
   app.post(
     "/auth/verify-email",

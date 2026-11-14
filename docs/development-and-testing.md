@@ -22,7 +22,7 @@ cp backend/.env.test.example backend/.env.test
 Create a PostgreSQL login and two databases if they do not already exist. The URLs should have these database names:
 
 ```text
-postgresql://edutrack:<local-password>@localhost:5432/edutrack
+postgresql://edutrack:<local-password>@localhost:5432/edutrack_dev
 postgresql://edutrack:<local-password>@localhost:5432/edutrack_test
 ```
 
@@ -77,7 +77,18 @@ Install PostgreSQL 18, create `edutrack_test`, configure `backend/.env.test`, th
 npm run test:integration --workspace=backend
 ```
 
-The integration setup refuses to run unless the URL targets exactly `edutrack_test`. The current database test connects through the existing pool and Drizzle client to execute read-only `SELECT 1`; it does not create or modify tables. The health route test uses Fastify `inject()` and does not start a listening server.
+The integration setup refuses to run unless the URL targets exactly `edutrack_test`. The test suite includes a read-only `SELECT 1` connectivity check. Identity schema and API integration tests create synthetic records in `edutrack_test` and clean them up; they do not connect to `edutrack_dev` or production. Fastify route tests use `inject()` and do not start a listening server.
+
+The checked-in identity migration must be applied to `edutrack_test` before running the identity integration tests. CI applies migrations to its fresh, isolated PostgreSQL service before testing. For local integration testing, load the test environment and apply the migration to that database only:
+
+```bash
+set -a
+source backend/.env.test
+set +a
+npm run db:migrate --workspace=backend
+```
+
+Do not use the development environment file for this operation.
 
 ### Playwright end-to-end tests
 

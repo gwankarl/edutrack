@@ -108,6 +108,54 @@ afterEach(async () => {
   await Promise.all(apps.splice(0).map((app) => app.close()));
 });
 
+describe("POST /api/v1/auth/register", () => {
+  const registrationPayload = {
+    displayName: "Synthetic Student",
+    email: "student@example.test",
+    password: "a sufficiently long synthetic passphrase",
+  };
+
+  it("rejects cross-origin registration before calling the service", async () => {
+    const { app, services } = await createRouteHarness();
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/register",
+      headers: { origin: "https://attacker.example" },
+      payload: registrationPayload,
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.headers["content-type"]).toContain(
+      "application/problem+json",
+    );
+    expect(services.registration.register).not.toHaveBeenCalled();
+  });
+
+  it("rate-limits registration attempts", async () => {
+    const { app } = await createRouteHarness();
+    const sendRegistration = () =>
+      app.inject({
+        method: "POST",
+        url: "/api/v1/auth/register",
+        payload: registrationPayload,
+      });
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      expect((await sendRegistration()).statusCode).toBe(201);
+    }
+
+    const limitedResponse = await sendRegistration();
+    expect(limitedResponse.statusCode).toBe(429);
+    expect(limitedResponse.headers["content-type"]).toContain(
+      "application/problem+json",
+    );
+    expect(limitedResponse.json()).toMatchObject({
+      type: "urn:edutrack:problem:rate-limit-exceeded",
+      status: 429,
+    });
+  });
+});
+
 describe("GET /api/v1/auth/me", () => {
   it("returns the authenticated user's safe profile and multiple roles", async () => {
     const { app, services } = await createRouteHarness();

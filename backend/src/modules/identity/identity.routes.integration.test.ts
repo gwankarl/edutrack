@@ -28,6 +28,7 @@ const app = await createApp(loadEnvironment(), {
   }),
 });
 const emailsToCleanUp: string[] = [];
+let nextSyntheticRemoteAddress = 1;
 const frontendOrigin = new URL(
   process.env.FRONTEND_URL ?? "http://localhost:5173",
 ).origin;
@@ -55,6 +56,7 @@ async function register(email: string, password = "synthetic test passphrase") {
   return app.inject({
     method: "POST",
     url: "/api/v1/auth/register",
+    remoteAddress: `198.51.100.${nextSyntheticRemoteAddress++}`,
     payload: {
       displayName: "Integration Test Student",
       email,
