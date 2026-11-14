@@ -10,6 +10,25 @@ const userSelection = {
   displayName: users.displayName,
 };
 
+const loginUserSelection = {
+  id: users.id,
+  email: users.email,
+  displayName: users.displayName,
+  passwordHash: users.passwordHash,
+  accountStatus: users.accountStatus,
+  emailVerifiedAt: users.emailVerifiedAt,
+};
+
+export type IdentityLoginUser = Pick<
+  typeof users.$inferSelect,
+  | "id"
+  | "email"
+  | "displayName"
+  | "passwordHash"
+  | "accountStatus"
+  | "emailVerifiedAt"
+>;
+
 export type IdentityUser = Pick<
   typeof users.$inferSelect,
   "id" | "email" | "displayName"
@@ -99,6 +118,17 @@ export function createIdentityRepository(database: Database) {
 
         throw error;
       }
+    },
+
+    async findUserForLogin(email: string): Promise<IdentityLoginUser | null> {
+      const normalizedEmail = normalizeEmail(email);
+      const [user] = await database
+        .select(loginUserSelection)
+        .from(users)
+        .where(sql`lower(${users.email}) = ${normalizedEmail}`)
+        .limit(1);
+
+      return user ?? null;
     },
   };
 }

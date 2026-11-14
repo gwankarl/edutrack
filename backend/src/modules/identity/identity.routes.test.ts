@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import cookie from "@fastify/cookie";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Environment } from "../../infrastructure/config/env.js";
@@ -7,9 +8,11 @@ import {
   identityRoutes,
   type IdentityRouteServices,
 } from "./identity.routes.js";
+import { InvalidCredentialsError } from "./login.service.js";
 import { InvalidVerificationTokenError } from "./verification-token.service.js";
 
 const safeUserId = "550e8400-e29b-41d4-a716-446655440000";
+const sessionToken = "synthetic-session-token-that-must-not-be-in-json";
 const genericForgotPasswordResponse = {
   message:
     "If an account exists for that email, a password reset link will be sent.",
@@ -21,11 +24,12 @@ const environment: Environment = {
   PORT: 5000,
   FRONTEND_URL: "http://localhost:5173",
   DATABASE_URL: "postgresql://test:test@localhost:5432/edutrack_test",
+  SESSION_TTL_SECONDS: 604800,
 };
 
 const apps: Array<ReturnType<typeof Fastify>> = [];
 
-async function createRouteHarness() {
+async function createRouteHarness(routeEnvironment: Environment = environment) {
   const app = Fastify({ logger: false });
   const services: IdentityRouteServices = {
     registration: {
@@ -47,12 +51,27 @@ async function createRouteHarness() {
         message: "Password has been reset.",
       })),
     },
+    login: {
+      login: vi.fn(async () => ({
+        user: {
+          id: safeUserId,
+          displayName: "Synthetic Student",
+          email: "student@example.test",
+        },
+        sessionToken,
+        sessionExpiresAt: new Date("2026-01-08T00:00:00.000Z"),
+      })),
+    },
+    sessions: {
+      revokeSession: vi.fn(async () => true),
+    },
   };
 
   registerErrorHandler(app);
+  await app.register(cookie);
   await app.register(identityRoutes, {
     prefix: "/api/v1",
-    environment,
+    environment: routeEnvironment,
     services,
   });
   apps.push(app);
@@ -62,6 +81,158 @@ async function createRouteHarness() {
 
 afterEach(async () => {
   await Promise.all(apps.splice(0).map((app) => app.close()));
+});
+
+describe("identity login and logout routes", () => {
+  const allowedOrigin = { origin: "http://localhost:5173" };
+
+  it("logs in, sets a protected session cookie, and omits the token from JSON", async () => {
+    const { app, services } = await createRouteHarness();
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/login",
+      headers: allowedOrigin,
+      payload: {
+        email: "STUDENT@example.test",
+        password: "a sufficiently long synthetic passphrase",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      id: safeUserId,
+      displayName: "Synthetic Student",
+      email: "student@example.test",
+    });
+    expect(response.body).not.toContain(sessionToken);
+    expect(response.body).not.toContain("sessionToken");
+    expect(response.headers["set-cookie"]).toContain("edutrack_session=");
+    expect(response.headers["set-cookie"]).toContain("HttpOnly");
+    expect(response.headers["set-cookie"]).toContain("SameSite=Lax");
+    expect(response.headers["set-cookie"]).toContain("Path=/");
+    expect(services.login.login).toHaveBeenCalledWith({
+      email: "student@example.test",
+      password: "a sufficiently long synthetic passphrase",
+    });
+  });
+
+  it("uses a Secure __Host cookie in production", async () => {
+    const { app } = await createRouteHarness({
+      ...environment,
+      NODE_ENV: "production",
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/login",
+      headers: allowedOrigin,
+      payload: {
+        email: "student@example.test",
+        password: "a sufficiently long synthetic passphrase",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["set-cookie"]).toContain(
+      "__Host-edutrack_session=",
+    );
+    expect(response.headers["set-cookie"]).toContain("Secure");
+    expect(response.headers["set-cookie"]).toContain("Path=/");
+    expect(response.headers["set-cookie"]).toContain("HttpOnly");
+  });
+
+  it("returns a generic 401 Problem Details response for invalid credentials", async () => {
+    const { app, services } = await createRouteHarness();
+    vi.mocked(services.login.login).mockRejectedValue(
+      new InvalidCredentialsError(),
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/login",
+      headers: allowedOrigin,
+      payload: {
+        email: "unknown@example.test",
+        password: "a sufficiently long synthetic passphrase",
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.headers["content-type"]).toContain(
+      "application/problem+json",
+    );
+    expect(response.json()).toEqual({
+      type: "urn:edutrack:problem:invalid-credentials",
+      title: "Authentication failed",
+      status: 401,
+      detail: "The email or password is incorrect.",
+    });
+    expect(response.body).not.toContain("unknown@example.test");
+  });
+
+  it("rejects invalid login input and cross-origin requests before login", async () => {
+    const { app, services } = await createRouteHarness();
+    const invalidBody = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/login",
+      headers: allowedOrigin,
+      payload: { email: "not-an-email", password: "weak" },
+    });
+    const crossOrigin = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/login",
+      headers: { origin: "https://attacker.example" },
+      payload: {
+        email: "student@example.test",
+        password: "a sufficiently long synthetic passphrase",
+      },
+    });
+
+    expect(invalidBody.statusCode).toBe(400);
+    expect(invalidBody.headers["content-type"]).toContain(
+      "application/problem+json",
+    );
+    expect(crossOrigin.statusCode).toBe(403);
+    expect(services.login.login).not.toHaveBeenCalled();
+  });
+
+  it("revokes the cookie session and clears the cookie on logout", async () => {
+    const { app, services } = await createRouteHarness();
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/logout",
+      headers: {
+        ...allowedOrigin,
+        cookie: `edutrack_session=${sessionToken}`,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ message: "Logged out." });
+    expect(services.sessions.revokeSession).toHaveBeenCalledWith(sessionToken);
+    expect(response.headers["set-cookie"]).toContain("edutrack_session=");
+    expect(response.headers["set-cookie"]).toContain("Max-Age=0");
+    expect(response.headers["set-cookie"]).toContain("HttpOnly");
+    expect(response.body).not.toContain(sessionToken);
+  });
+
+  it("allows idempotent logout without a cookie and rejects a foreign Origin", async () => {
+    const { app, services } = await createRouteHarness();
+    const noCookie = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/logout",
+      headers: allowedOrigin,
+    });
+    const crossOrigin = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/logout",
+      headers: { origin: "https://attacker.example" },
+    });
+
+    expect(noCookie.statusCode).toBe(200);
+    expect(services.sessions.revokeSession).not.toHaveBeenCalled();
+    expect(crossOrigin.statusCode).toBe(403);
+    expect(services.sessions.revokeSession).not.toHaveBeenCalled();
+  });
 });
 
 describe("identity recovery routes", () => {

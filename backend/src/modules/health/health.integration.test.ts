@@ -8,6 +8,7 @@ const app = await createApp({
   PORT: 5000,
   FRONTEND_URL: "http://localhost:5173",
   DATABASE_URL: "postgresql://edutrack:replace-me@localhost:5432/edutrack_test",
+  SESSION_TTL_SECONDS: 604800,
 });
 
 afterAll(async () => {

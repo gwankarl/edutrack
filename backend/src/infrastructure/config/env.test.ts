@@ -15,12 +15,23 @@ describe("loadEnvironment", () => {
       PORT: 5000,
       DATABASE_URL: "postgresql://edutrack:replace-me@localhost:5432/edutrack",
       FRONTEND_URL: "http://localhost:5173",
+      SESSION_TTL_SECONDS: 604800,
     });
   });
 
   it("rejects a database URL with a non-PostgreSQL scheme", () => {
     expect(() =>
       loadEnvironment({ DATABASE_URL: "https://example.com" }),
+    ).toThrow();
+  });
+
+  it("rejects a session lifetime outside the configured range", () => {
+    expect(() =>
+      loadEnvironment({
+        DATABASE_URL:
+          "postgresql://edutrack:replace-me@localhost:5432/edutrack",
+        SESSION_TTL_SECONDS: "0",
+      }),
     ).toThrow();
   });
 });

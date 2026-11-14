@@ -28,6 +28,9 @@ const app = await createApp(loadEnvironment(), {
   }),
 });
 const emailsToCleanUp: string[] = [];
+const frontendOrigin = new URL(
+  process.env.FRONTEND_URL ?? "http://localhost:5173",
+).origin;
 
 function makeEmail(): string {
   return `route-${randomUUID()}@example.test`;
@@ -135,9 +138,9 @@ describe("POST /api/v1/auth/register", () => {
     );
     expect(response.json()).toMatchObject({
       type: "urn:edutrack:problem:validation-error",
-      title: "Invalid registration request",
+      title: "Invalid request",
+      detail: "The request body is invalid.",
       status: 400,
-      detail: "The registration request is invalid.",
       errors: expect.any(Array),
     });
     expect(response.body).not.toContain(password);
@@ -306,5 +309,157 @@ describe("POST /api/v1/auth/register", () => {
       "application/problem+json",
     );
     expect(replayResponse.body).not.toContain(token);
+  });
+
+  it("logs in with a verified account, stores only the token hash, then logs out", async () => {
+    const email = makeEmail();
+    const password = "synthetic test passphrase";
+    emailsToCleanUp.push(email);
+
+    const registration = await register(email, password);
+    expect(registration.statusCode).toBe(201);
+
+    const verificationToken = getTokenFromLatestEmail();
+    const verification = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/verify-email",
+      payload: { token: verificationToken },
+    });
+    expect(verification.statusCode).toBe(200);
+
+    const login = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/login",
+      headers: { origin: frontendOrigin },
+      payload: { email, password },
+    });
+
+    expect(login.statusCode).toBe(200);
+    expect(login.headers["set-cookie"]).toContain("HttpOnly");
+    expect(login.headers["set-cookie"]).toContain("SameSite=Lax");
+    expect(login.headers["set-cookie"]).toContain("Path=/");
+    expect(login.body).not.toContain(password);
+    expect(login.body).not.toContain("passwordHash");
+    expect(login.body).not.toContain("sessionToken");
+
+    const setCookie = login.headers["set-cookie"];
+    const cookieHeader = Array.isArray(setCookie) ? setCookie[0] : setCookie;
+    expect(cookieHeader).toBeTruthy();
+    const [cookiePair] = cookieHeader!.split(";");
+    const separatorIndex = cookiePair.indexOf("=");
+    const rawSessionToken = decodeURIComponent(
+      cookiePair.slice(separatorIndex + 1),
+    );
+    expect(rawSessionToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
+
+    const sessionTokenHash = createHash("sha256")
+      .update(rawSessionToken)
+      .digest("hex");
+    const [storedSession] = await app.db
+      .select({
+        sessionTokenHash: authSessions.sessionTokenHash,
+        expiresAt: authSessions.expiresAt,
+        revokedAt: authSessions.revokedAt,
+      })
+      .from(authSessions)
+      .where(eq(authSessions.sessionTokenHash, sessionTokenHash));
+
+    expect(storedSession).toBeDefined();
+    expect(storedSession.sessionTokenHash).toBe(sessionTokenHash);
+    expect(storedSession.sessionTokenHash).not.toBe(rawSessionToken);
+    expect(storedSession.expiresAt.getTime()).toBeGreaterThan(Date.now());
+    expect(storedSession.revokedAt).toBeNull();
+
+    const logout = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/logout",
+      headers: {
+        origin: frontendOrigin,
+        cookie: cookiePair,
+      },
+    });
+
+    expect(logout.statusCode).toBe(200);
+    expect(logout.json()).toEqual({ message: "Logged out." });
+    expect(logout.headers["set-cookie"]).toContain("Max-Age=0");
+    expect(logout.headers["set-cookie"]).toContain("HttpOnly");
+    expect(logout.body).not.toContain(rawSessionToken);
+
+    const [revokedSession] = await app.db
+      .select({ revokedAt: authSessions.revokedAt })
+      .from(authSessions)
+      .where(eq(authSessions.sessionTokenHash, sessionTokenHash));
+    expect(revokedSession.revokedAt).toBeInstanceOf(Date);
+  });
+
+  it("rejects unverified, invalid-credential, and cross-origin login requests safely", async () => {
+    const email = makeEmail();
+    emailsToCleanUp.push(email);
+    const registration = await register(email);
+    expect(registration.statusCode).toBe(201);
+
+    const unverifiedLogin = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/login",
+      headers: { origin: frontendOrigin },
+      payload: { email, password: "synthetic test passphrase" },
+    });
+    expect(unverifiedLogin.statusCode).toBe(401);
+    expect(unverifiedLogin.headers["content-type"]).toContain(
+      "application/problem+json",
+    );
+    expect(unverifiedLogin.json()).toEqual({
+      type: "urn:edutrack:problem:invalid-credentials",
+      title: "Authentication failed",
+      status: 401,
+      detail: "The email or password is incorrect.",
+    });
+    expect(unverifiedLogin.body).not.toContain(email);
+    expect(unverifiedLogin.body).not.toContain("synthetic test passphrase");
+
+    const token = getTokenFromLatestEmail();
+    const verification = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/verify-email",
+      payload: { token },
+    });
+    expect(verification.statusCode).toBe(200);
+
+    const invalidCredentials = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/login",
+      headers: { origin: frontendOrigin },
+      payload: { email, password: "incorrect synthetic password" },
+    });
+    expect(invalidCredentials.statusCode).toBe(401);
+    expect(invalidCredentials.body).not.toContain(email);
+    expect(invalidCredentials.body).not.toContain(
+      "incorrect synthetic password",
+    );
+
+    const crossOrigin = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/login",
+      headers: { origin: "https://attacker.example" },
+      payload: { email, password: "synthetic test passphrase" },
+    });
+    expect(crossOrigin.statusCode).toBe(403);
+    expect(crossOrigin.headers["content-type"]).toContain(
+      "application/problem+json",
+    );
+    expect(crossOrigin.body).not.toContain(email);
+
+    const crossOriginLogout = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/logout",
+      headers: {
+        origin: "https://attacker.example",
+        cookie: "edutrack_session=synthetic-session-token",
+      },
+    });
+    expect(crossOriginLogout.statusCode).toBe(403);
+    expect(crossOriginLogout.headers["content-type"]).toContain(
+      "application/problem+json",
+    );
   });
 });

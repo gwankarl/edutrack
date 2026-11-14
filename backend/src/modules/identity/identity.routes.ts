@@ -9,6 +9,11 @@ import type {
 
 import type { Environment } from "../../infrastructure/config/env.js";
 import {
+  getClearedSessionCookieOptions,
+  getSessionCookieName,
+  getSessionCookieOptions,
+} from "../../infrastructure/sessions/session-cookie.js";
+import {
   createEmailService,
   EmailConfigurationError,
   type EmailService,
@@ -19,7 +24,7 @@ import {
   DuplicateEmailError,
 } from "./identity.repository.js";
 import { createIdentityService } from "./identity.service.js";
-import { hashPassword } from "./password.service.js";
+import { hashPassword, verifyPassword } from "./password.service.js";
 import {
   createEmailVerificationService,
   EmailVerificationDeliveryError,
@@ -33,11 +38,21 @@ import {
 import {
   forgotPasswordRequestSchema,
   forgotPasswordResponseSchema,
+  loginRequestSchema,
+  loginResponseSchema,
+  logoutResponseSchema,
   resetPasswordRequestSchema,
   resetPasswordResponseSchema,
   verifyEmailRequestSchema,
   verifyEmailResponseSchema,
 } from "./identity.schemas.js";
+import {
+  createLoginService,
+  InvalidCredentialsError,
+  LoginSessionCreationError,
+} from "./login.service.js";
+import { createSessionRepository } from "./session.repository.js";
+import { createSessionService } from "./session.service.js";
 
 type RegistrationService = Pick<
   ReturnType<typeof createIdentityService>,
@@ -51,11 +66,18 @@ type PasswordRecoveryService = Pick<
   ReturnType<typeof createPasswordRecoveryService>,
   "requestReset" | "resetPassword"
 >;
+type LoginService = Pick<ReturnType<typeof createLoginService>, "login">;
+type SessionService = Pick<
+  ReturnType<typeof createSessionService>,
+  "revokeSession"
+>;
 
 export interface IdentityRouteServices {
   registration: RegistrationService;
   emailVerification: EmailVerificationService;
   passwordRecovery: PasswordRecoveryService;
+  login: LoginService;
+  sessions: SessionService;
 }
 
 export interface IdentityRouteOptions {
@@ -83,9 +105,9 @@ function sendProblem(reply: FastifyReply, problem: ProblemDetails) {
 function sendValidationProblem(reply: FastifyReply, error: ZodError) {
   return sendProblem(reply, {
     type: "urn:edutrack:problem:validation-error",
-    title: "Invalid registration request",
+    title: "Invalid request",
     status: 400,
-    detail: "The registration request is invalid.",
+    detail: "The request body is invalid.",
     errors: error.issues.map((issue) => ({
       field: issue.path.join("."),
       message: issue.message,
@@ -127,6 +149,24 @@ function handleIdentityRouteError(error: unknown, reply: FastifyReply) {
       status: 503,
       detail:
         "Your account was created, but the verification email could not be sent.",
+    });
+  }
+
+  if (error instanceof InvalidCredentialsError) {
+    return sendProblem(reply, {
+      type: "urn:edutrack:problem:invalid-credentials",
+      title: "Authentication failed",
+      status: 401,
+      detail: "The email or password is incorrect.",
+    });
+  }
+
+  if (error instanceof LoginSessionCreationError) {
+    return sendProblem(reply, {
+      type: "urn:edutrack:problem:session-unavailable",
+      title: "Login unavailable",
+      status: 503,
+      detail: "Login could not be completed. Please try again.",
     });
   }
 
@@ -174,12 +214,60 @@ function publicMutationGuard(frontendOrigin: string) {
   };
 }
 
+function cookieMutationGuard(frontendOrigin: string, requireJson: boolean) {
+  return async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<FastifyReply | void> => {
+    const origin = request.headers.origin;
+    const fetchSite = request.headers["sec-fetch-site"];
+    let originIsAllowed = false;
+
+    if (origin !== undefined) {
+      try {
+        originIsAllowed = new URL(origin).origin === frontendOrigin;
+      } catch {
+        originIsAllowed = false;
+      }
+    }
+
+    if (!originIsAllowed || fetchSite === "cross-site") {
+      return sendProblem(reply, {
+        type: "urn:edutrack:problem:csrf-rejected",
+        title: "Request rejected",
+        status: 403,
+        detail: "The request origin is not allowed.",
+      });
+    }
+
+    if (requireJson) {
+      const contentType = request.headers["content-type"]
+        ?.split(";")[0]
+        ?.trim()
+        .toLowerCase();
+
+      if (contentType !== "application/json") {
+        return sendProblem(reply, {
+          type: "urn:edutrack:problem:unsupported-media-type",
+          title: "Unsupported media type",
+          status: 415,
+          detail: "Requests must use application/json.",
+        });
+      }
+    }
+  };
+}
+
 function createRouteServices(
   app: FastifyInstance,
   environment: Environment,
   emailTransportFactory?: EmailTransportFactory,
 ): IdentityRouteServices {
   const repository = createIdentityRepository(app.db);
+  const sessionRepository = createSessionRepository(app.db);
+  const sessionService = createSessionService(sessionRepository, {
+    sessionLifetimeSeconds: environment.SESSION_TTL_SECONDS,
+  });
   const tokenRepository = createVerificationTokenRepository(app.db);
   const tokenService = createVerificationTokenService(tokenRepository);
   let emailService: EmailService;
@@ -214,6 +302,13 @@ function createRouteServices(
       frontendUrl: environment.FRONTEND_URL,
       hashPassword,
     }),
+    login: createLoginService({
+      identityRepository: repository,
+      verifyPassword,
+      hashPassword,
+      sessionService,
+    }),
+    sessions: sessionService,
   };
 }
 
@@ -232,6 +327,61 @@ export const identityRoutes: FastifyPluginAsync<IdentityRouteOptions> = async (
     createRouteServices(app, environment, emailTransportFactory);
   const frontendOrigin = new URL(environment.FRONTEND_URL).origin;
   const guard = publicMutationGuard(frontendOrigin);
+  const loginGuard = cookieMutationGuard(frontendOrigin, true);
+  const logoutGuard = cookieMutationGuard(frontendOrigin, false);
+
+  app.post(
+    "/auth/login",
+    {
+      preHandler: loginGuard,
+      config: { rateLimit: { max: 10, timeWindow: "15 minutes" } },
+    },
+    async (request, reply) => {
+      try {
+        const body = loginRequestSchema.parse(request.body);
+        const result = await services.login.login(body);
+
+        reply.setCookie(
+          getSessionCookieName(environment),
+          result.sessionToken,
+          getSessionCookieOptions(environment, result.sessionExpiresAt),
+        );
+
+        return reply.code(200).send(loginResponseSchema.parse(result.user));
+      } catch (error) {
+        return handleIdentityRouteError(error, reply);
+      }
+    },
+  );
+
+  app.post(
+    "/auth/logout",
+    {
+      preHandler: logoutGuard,
+      config: { rateLimit: { max: 30, timeWindow: "15 minutes" } },
+    },
+    async (request, reply) => {
+      try {
+        const cookieName = getSessionCookieName(environment);
+        const sessionToken = request.cookies[cookieName];
+
+        if (sessionToken) {
+          await services.sessions.revokeSession(sessionToken);
+        }
+
+        reply.clearCookie(
+          cookieName,
+          getClearedSessionCookieOptions(environment),
+        );
+
+        return reply
+          .code(200)
+          .send(logoutResponseSchema.parse({ message: "Logged out." }));
+      } catch (error) {
+        return handleIdentityRouteError(error, reply);
+      }
+    },
+  );
 
   app.post("/auth/register", async (request, reply) => {
     try {

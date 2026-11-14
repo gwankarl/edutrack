@@ -22,4 +22,13 @@ export {
   type RegistrationResponse,
 } from "./identity/registration.js";
 
+export {
+  loginRequestSchema,
+  loginResponseSchema,
+  logoutResponseSchema,
+  type LoginRequest,
+  type LoginResponse,
+  type LogoutResponse,
+} from "./identity/login.js";
+
 export { healthResponseSchema, type HealthResponse } from "./system/health.js";

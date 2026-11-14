@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import cookie from "@fastify/cookie";
 
 import { createDatabase } from "../infrastructure/database/client.js";
 import { createDatabasePool } from "../infrastructure/database/pool.js";
@@ -28,6 +29,8 @@ export async function createApp(
   });
 
   registerErrorHandler(app);
+
+  await app.register(cookie);
 
   await registerModules(app, environment, dependencies);
 

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  loginRequestSchema,
+  loginResponseSchema,
+  logoutResponseSchema,
   registrationRequestSchema,
   registrationResponseSchema,
 } from "./identity.schemas.js";
@@ -110,6 +113,105 @@ describe("registrationResponseSchema", () => {
         displayName: "Ada Gwanyama",
         email: "ada@example.test",
         passwordHash: "must-not-be-returned",
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("loginRequestSchema", () => {
+  it("normalizes email and preserves the password exactly", () => {
+    expect(
+      loginRequestSchema.parse({
+        email: "  ADA@Example.Test ",
+        password: "  a valid synthetic passphrase  ",
+      }),
+    ).toEqual({
+      email: "ada@example.test",
+      password: "  a valid synthetic passphrase  ",
+    });
+  });
+
+  it("rejects malformed email and passwords outside registration limits", () => {
+    expect(
+      loginRequestSchema.safeParse({
+        email: "not-an-email",
+        password: "a valid synthetic passphrase",
+      }).success,
+    ).toBe(false);
+
+    expect(
+      loginRequestSchema.safeParse({
+        email: "ada@example.test",
+        password: "short",
+      }).success,
+    ).toBe(false);
+
+    expect(
+      loginRequestSchema.safeParse({
+        email: "ada@example.test",
+        password: "p".repeat(129),
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects unexpected request fields", () => {
+    expect(
+      loginRequestSchema.safeParse({
+        email: "ada@example.test",
+        password: "a valid synthetic passphrase",
+        sessionToken: "must-not-be-accepted",
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("loginResponseSchema", () => {
+  it("accepts the safe shared user profile", () => {
+    expect(
+      loginResponseSchema.parse({
+        id: "550e8400-e29b-41d4-a716-446655440000",
+        displayName: "Ada Gwanyama",
+        email: "ada@example.test",
+      }),
+    ).toEqual({
+      id: "550e8400-e29b-41d4-a716-446655440000",
+      displayName: "Ada Gwanyama",
+      email: "ada@example.test",
+    });
+  });
+
+  it("rejects password, password hash, and session token fields", () => {
+    const response = {
+      id: "550e8400-e29b-41d4-a716-446655440000",
+      displayName: "Ada Gwanyama",
+      email: "ada@example.test",
+    };
+
+    for (const sensitiveFields of [
+      { password: "synthetic-password" },
+      { passwordHash: "$argon2id$synthetic-hash" },
+      { sessionToken: "synthetic-session-token" },
+    ]) {
+      expect(
+        loginResponseSchema.safeParse({
+          ...response,
+          ...sensitiveFields,
+        }).success,
+      ).toBe(false);
+    }
+  });
+});
+
+describe("logoutResponseSchema", () => {
+  it("accepts only the fixed logout message", () => {
+    expect(logoutResponseSchema.parse({ message: "Logged out." })).toEqual({
+      message: "Logged out.",
+    });
+
+    expect(
+      logoutResponseSchema.safeParse({
+        message: "Logged out.",
+        sessionToken: "must-not-be-returned",
       }).success,
     ).toBe(false);
   });
