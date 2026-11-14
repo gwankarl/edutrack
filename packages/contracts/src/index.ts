@@ -63,4 +63,16 @@ export {
   type AdminTeacherApplicationListResponse,
 } from "./teacher-applications/admin.js";
 
+export {
+  ADMIN_TEACHER_APPLICATION_DECISION_TEXT_MAX_LENGTH,
+  adminTeacherApplicationDecisionParamsSchema,
+  adminTeacherApplicationDecisionResponseSchema,
+  approveTeacherApplicationRequestSchema,
+  rejectTeacherApplicationRequestSchema,
+  type AdminTeacherApplicationDecisionParams,
+  type AdminTeacherApplicationDecisionResponse,
+  type ApproveTeacherApplicationRequest,
+  type RejectTeacherApplicationRequest,
+} from "./teacher-applications/admin-decisions.js";
+
 export { healthResponseSchema, type HealthResponse } from "./system/health.js";

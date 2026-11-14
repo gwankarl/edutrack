@@ -11,6 +11,8 @@ export default defineConfig({
       "tests/integration/**/*.integration.test.ts",
       "src/modules/teachers/teacher-application.repository.integration.test.ts",
       "src/modules/teachers/teacher-application-review.repository.integration.test.ts",
+      "src/modules/teachers/teacher-application-decision.repository.integration.test.ts",
+      "src/modules/teachers/teacher-application-decision.service.integration.test.ts",
     ],
     setupFiles: ["./tests/integration/setup.ts"],
     testTimeout: 15_000,
