@@ -19,6 +19,8 @@ export default defineConfig({
       "src/modules/academic-catalog/academic-catalog.repository.integration.test.ts",
       "src/infrastructure/database/seeds/academic-catalog.seed.integration.test.ts",
       "src/modules/courses/course.repository.integration.test.ts",
+      "src/modules/courses/topic.repository.integration.test.ts",
+      "src/modules/courses/lesson.repository.integration.test.ts",
     ],
     setupFiles: ["./tests/integration/setup.ts"],
     testTimeout: 15_000,

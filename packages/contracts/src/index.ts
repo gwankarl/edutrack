@@ -113,4 +113,43 @@ export {
   type UpdateTeacherCourseRequest,
 } from "./courses/courses.js";
 
+export {
+  TOPIC_DESCRIPTION_MAX_LENGTH,
+  TOPIC_TITLE_MAX_LENGTH,
+  createTeacherTopicRequestSchema,
+  reorderTeacherTopicsRequestSchema,
+  teacherCourseTopicParamsSchema,
+  teacherTopicCollectionParamsSchema,
+  teacherTopicListResponseSchema,
+  teacherTopicResponseSchema,
+  updateTeacherTopicRequestSchema,
+  type CreateTeacherTopicRequest,
+  type ReorderTeacherTopicsRequest,
+  type TeacherCourseTopicParams,
+  type TeacherTopicCollectionParams,
+  type TeacherTopicListResponse,
+  type TeacherTopicResponse,
+  type UpdateTeacherTopicRequest,
+} from "./courses/topics.js";
+
+export {
+  LESSON_TITLE_MAX_LENGTH,
+  createTeacherLessonRequestSchema,
+  lessonContentSchema,
+  teacherCourseTopicLessonParamsSchema,
+  teacherLessonListResponseSchema,
+  teacherLessonResponseSchema,
+  teacherTopicLessonCollectionParamsSchema,
+  reorderTeacherLessonsRequestSchema,
+  updateTeacherLessonRequestSchema,
+  type CreateTeacherLessonRequest,
+  type ReorderTeacherLessonsRequest,
+  type LessonContent,
+  type TeacherCourseTopicLessonParams,
+  type TeacherLessonListResponse,
+  type TeacherLessonResponse,
+  type TeacherTopicLessonCollectionParams,
+  type UpdateTeacherLessonRequest,
+} from "./courses/lessons.js";
+
 export { healthResponseSchema, type HealthResponse } from "./system/health.js";

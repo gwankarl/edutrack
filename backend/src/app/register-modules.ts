@@ -8,6 +8,8 @@ import { teacherApplicationRoutes } from "../modules/teachers/teacher-applicatio
 import { teacherApplicationReviewRoutes } from "../modules/teachers/teacher-application-review.routes.js";
 import { teacherApplicationDecisionRoutes } from "../modules/teachers/teacher-application-decision.routes.js";
 import { courseRoutes } from "../modules/courses/course.routes.js";
+import { topicRoutes } from "../modules/courses/topic.routes.js";
+import { lessonRoutes } from "../modules/courses/lesson.routes.js";
 import type { AppDependencies } from "./create-app.js";
 
 export async function registerModules(
@@ -41,6 +43,16 @@ export async function registerModules(
   });
 
   await app.register(courseRoutes, {
+    prefix: "/api/v1",
+    environment,
+  });
+
+  await app.register(topicRoutes, {
+    prefix: "/api/v1",
+    environment,
+  });
+
+  await app.register(lessonRoutes, {
     prefix: "/api/v1",
     environment,
   });
