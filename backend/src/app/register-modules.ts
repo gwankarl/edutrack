@@ -10,6 +10,10 @@ import { teacherApplicationDecisionRoutes } from "../modules/teachers/teacher-ap
 import { courseRoutes } from "../modules/courses/course.routes.js";
 import { topicRoutes } from "../modules/courses/topic.routes.js";
 import { lessonRoutes } from "../modules/courses/lesson.routes.js";
+import { quizRoutes } from "../modules/courses/quiz.routes.js";
+import { quizQuestionRoutes } from "../modules/courses/quiz-question.routes.js";
+import { quizOptionRoutes } from "../modules/courses/quiz-option.routes.js";
+
 import type { AppDependencies } from "./create-app.js";
 
 export async function registerModules(
@@ -53,6 +57,21 @@ export async function registerModules(
   });
 
   await app.register(lessonRoutes, {
+    prefix: "/api/v1",
+    environment,
+  });
+
+  await app.register(quizRoutes, {
+    prefix: "/api/v1",
+    environment,
+  });
+
+  await app.register(quizQuestionRoutes, {
+    prefix: "/api/v1",
+    environment,
+  });
+
+  await app.register(quizOptionRoutes, {
     prefix: "/api/v1",
     environment,
   });
