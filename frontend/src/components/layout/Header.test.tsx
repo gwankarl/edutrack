@@ -182,6 +182,21 @@ describe("Header", () => {
     expect(
       screen.queryByRole("link", { name: "Application Status" }),
     ).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: "Teacher Applications" }),
+    ).toBeNull();
+  });
+
+  it("shows Teacher Applications to Administrators with multiple roles", async () => {
+    stubTeacherNavigation(["student", "administrator"], null);
+    renderHeader();
+
+    expect(
+      await screen.findByRole("link", { name: "Teacher Applications" }),
+    ).toHaveAttribute("href", "/admin/teacher-applications");
+    expect(
+      await screen.findByRole("link", { name: "Become a Teacher" }),
+    ).toHaveAttribute("href", "/teacher/apply");
   });
 
   it("shows Application Status for an applicant with a pending application", async () => {

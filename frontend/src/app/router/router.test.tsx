@@ -2,7 +2,7 @@ import { matchRoutes } from "react-router";
 import { describe, expect, it } from "vitest";
 
 import ProtectedRoute from "./ProtectedRoute.js";
-import { routeConfig } from "./router.js";
+import { AdministratorRouteGuard, routeConfig } from "./router.js";
 
 describe("application routes", () => {
   it.each([
@@ -49,5 +49,27 @@ describe("application routes", () => {
     expect(
       matches?.some((match) => match.route.Component === ProtectedRoute),
     ).toBe(true);
+  });
+
+  it.each([
+    "/admin/teacher-applications",
+    "/admin/teacher-applications/550e8400-e29b-41d4-a716-446655440001",
+  ])("protects administrator route %s with both guards", (pathname) => {
+    const matches = matchRoutes(routeConfig, pathname);
+
+    expect(matches).not.toBeNull();
+    expect(
+      matches?.some((match) => match.route.Component === ProtectedRoute),
+    ).toBe(true);
+    expect(
+      matches?.some(
+        (match) => match.route.Component === AdministratorRouteGuard,
+      ),
+    ).toBe(true);
+    expect(matches?.at(-1)?.route.path).toBe(
+      pathname.endsWith("/teacher-applications")
+        ? "admin/teacher-applications"
+        : "admin/teacher-applications/:applicationId",
+    );
   });
 });

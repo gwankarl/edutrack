@@ -10,10 +10,17 @@ import LoginPage from "../../features/auth/pages/LoginPage.js";
 import ProfilePage from "../../features/account/pages/ProfilePage.js";
 import TeacherApplicationPage from "../../features/teacher-applications/pages/TeacherApplicationPage.js";
 import TeacherApplicationStatusPage from "../../features/teacher-applications/pages/TeacherApplicationStatusPage.js";
+import TeacherApplicationsPage from "../../features/administration/teacher-applications/pages/TeacherApplicationsPage.js";
+import TeacherApplicationReviewPage from "../../features/administration/teacher-applications/pages/TeacherApplicationReviewPage.js";
 import AppLayout from "../layouts/AppLayout.js";
 import HomePage from "./HomePage.js";
 import NotFoundPage from "./NotFoundPage.js";
 import ProtectedRoute from "./ProtectedRoute.js";
+import RoleGuard from "./RoleGuard.js";
+
+export function AdministratorRouteGuard() {
+  return <RoleGuard allowedRoles={["administrator"]} />;
+}
 
 export const routeConfig: RouteObject[] = [
   {
@@ -61,6 +68,19 @@ export const routeConfig: RouteObject[] = [
           {
             path: "teacher/application-status",
             Component: TeacherApplicationStatusPage,
+          },
+          {
+            Component: AdministratorRouteGuard,
+            children: [
+              {
+                path: "admin/teacher-applications",
+                Component: TeacherApplicationsPage,
+              },
+              {
+                path: "admin/teacher-applications/:applicationId",
+                Component: TeacherApplicationReviewPage,
+              },
+            ],
           },
         ],
       },

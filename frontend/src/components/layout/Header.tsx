@@ -1,5 +1,5 @@
+import { ClipboardCheck, ClipboardList, GraduationCap } from "lucide-react";
 import { Link, NavLink } from "react-router";
-import { ClipboardCheck, GraduationCap } from "lucide-react";
 
 import { useCurrentUser } from "../../features/auth/hooks/useCurrentUser.js";
 import { useMyTeacherApplication } from "../../features/teacher-applications/hooks/useMyTeacherApplication.js";
@@ -18,6 +18,10 @@ export default function Header() {
   const isTeacher =
     currentUser.status === "authenticated" &&
     currentUser.user.roles.includes("teacher");
+
+  const isAdministrator =
+    currentUser.status === "authenticated" &&
+    currentUser.user.roles.includes("administrator");
 
   const application =
     currentUser.status === "authenticated" &&
@@ -48,6 +52,16 @@ export default function Header() {
             <NavLink className={navLinkClassName} end to="/register">
               Register
             </NavLink>
+
+            {isAdministrator && (
+              <NavLink
+                className={navLinkClassName}
+                to="/admin/teacher-applications"
+              >
+                <ClipboardList aria-hidden="true" className="mr-2 size-5" />
+                Teacher Applications
+              </NavLink>
+            )}
 
             {currentUser.status === "authenticated" &&
               !isTeacher &&
