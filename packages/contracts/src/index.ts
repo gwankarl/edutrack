@@ -91,4 +91,26 @@ export {
   type SubjectResponse,
 } from "./catalog/subjects.js";
 
+export {
+  COURSE_DESCRIPTION_MAX_LENGTH,
+  COURSE_TITLE_MAX_LENGTH,
+  TEACHER_COURSE_DEFAULT_PAGE,
+  TEACHER_COURSE_DEFAULT_PAGE_SIZE,
+  TEACHER_COURSE_MAX_PAGE_SIZE,
+  courseStatusSchema,
+  createTeacherCourseRequestSchema,
+  teacherCourseListQuerySchema,
+  teacherCourseListResponseSchema,
+  teacherCourseParamsSchema,
+  teacherCourseResponseSchema,
+  updateTeacherCourseRequestSchema,
+  type CourseStatus,
+  type CreateTeacherCourseRequest,
+  type TeacherCourseListQuery,
+  type TeacherCourseListResponse,
+  type TeacherCourseParams,
+  type TeacherCourseResponse,
+  type UpdateTeacherCourseRequest,
+} from "./courses/courses.js";
+
 export { healthResponseSchema, type HealthResponse } from "./system/health.js";

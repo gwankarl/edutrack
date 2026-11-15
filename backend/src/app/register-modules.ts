@@ -7,6 +7,7 @@ import { identityRoutes } from "../modules/identity/identity.routes.js";
 import { teacherApplicationRoutes } from "../modules/teachers/teacher-application.routes.js";
 import { teacherApplicationReviewRoutes } from "../modules/teachers/teacher-application-review.routes.js";
 import { teacherApplicationDecisionRoutes } from "../modules/teachers/teacher-application-decision.routes.js";
+import { courseRoutes } from "../modules/courses/course.routes.js";
 import type { AppDependencies } from "./create-app.js";
 
 export async function registerModules(
@@ -35,6 +36,11 @@ export async function registerModules(
   });
 
   await app.register(teacherApplicationDecisionRoutes, {
+    prefix: "/api/v1",
+    environment,
+  });
+
+  await app.register(courseRoutes, {
     prefix: "/api/v1",
     environment,
   });
