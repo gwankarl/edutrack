@@ -36,6 +36,10 @@ describe("useLogin", () => {
       ["admin", "teacher-applications", "cached-user", "list", {}],
       { items: ["cached-administrator-data"] },
     );
+    queryClient.setQueryData(
+      ["course-authoring", "courses", "cached-user", "list", {}],
+      { items: ["cached-course"] },
+    );
 
     function Wrapper({ children }: PropsWithChildren) {
       return (
@@ -72,6 +76,15 @@ describe("useLogin", () => {
       queryClient.getQueryData([
         "admin",
         "teacher-applications",
+        "cached-user",
+        "list",
+        {},
+      ]),
+    ).toBeUndefined();
+    expect(
+      queryClient.getQueryData([
+        "course-authoring",
+        "courses",
         "cached-user",
         "list",
         {},

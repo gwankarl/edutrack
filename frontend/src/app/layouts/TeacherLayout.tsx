@@ -21,8 +21,8 @@ export default function TeacherLayout() {
             Teaching workspace
           </h1>
           <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-            Manage your teaching activities from one place. Course management
-            tools will be introduced here in a future update.
+            Manage your courses and prepare learning materials for your
+            students.
           </p>
         </div>
 
@@ -42,18 +42,10 @@ export default function TeacherLayout() {
             Overview
           </NavLink>
 
-          <div
-            aria-label="Courses, coming soon"
-            aria-disabled="true"
-            className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-medium text-muted-foreground"
-            title="Course management is coming soon"
-          >
+          <NavLink className={workspaceLinkClassName} to="courses">
             <BookOpen aria-hidden="true" className="size-5" />
-            <span>Courses</span>
-            <span className="rounded-full bg-surface-muted px-2 py-1 text-xs">
-              Coming soon
-            </span>
-          </div>
+            My Courses
+          </NavLink>
         </nav>
 
         <section aria-label="Teacher workspace page" className="min-w-0">

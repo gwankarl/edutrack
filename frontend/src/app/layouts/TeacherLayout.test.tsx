@@ -11,6 +11,9 @@ function renderTeacherLayout(initialPath = "/teacher") {
       <Routes>
         <Route element={<TeacherLayout />} path="/teacher">
           <Route element={<p>Teacher page content</p>} index />
+          <Route element={<p>Teacher course list</p>} path="courses" />
+          <Route element={<p>Create course form</p>} path="courses/new" />
+          <Route element={<p>Course details</p>} path="courses/:courseId" />
         </Route>
       </Routes>
     </MemoryRouter>,
@@ -30,7 +33,7 @@ describe("TeacherLayout", () => {
     ).toBeVisible();
   });
 
-  it("provides accessible workspace navigation and a non-active course placeholder", () => {
+  it("provides accessible workspace navigation with a My Courses link", () => {
     renderTeacherLayout();
 
     const navigation = screen.getByRole("navigation", {
@@ -42,9 +45,25 @@ describe("TeacherLayout", () => {
       "aria-current",
       "page",
     );
-    expect(navigation).toHaveTextContent("Courses");
-    expect(navigation).toHaveTextContent("Coming soon");
-    expect(screen.queryByRole("link", { name: /courses/i })).toBeNull();
+    expect(screen.getByRole("link", { name: "My Courses" })).toHaveAttribute(
+      "href",
+      "/teacher/courses",
+    );
+    expect(screen.queryByText("Coming soon")).toBeNull();
+  });
+
+  it.each([
+    ["/teacher/courses", "Teacher course list"],
+    ["/teacher/courses/new", "Create course form"],
+    ["/teacher/courses/550e8400-e29b-41d4-a716-446655440020", "Course details"],
+  ])("marks My Courses active for %s", (path, pageText) => {
+    renderTeacherLayout(path);
+
+    expect(screen.getByText(pageText)).toBeVisible();
+    expect(screen.getByRole("link", { name: "My Courses" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
   });
 
   it("supports keyboard focus on the active workspace link", async () => {

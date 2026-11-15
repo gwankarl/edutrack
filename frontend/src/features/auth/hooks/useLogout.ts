@@ -13,11 +13,17 @@ export function useLogout() {
         queryClient.cancelQueries({ queryKey: currentUserQueryKey }),
         queryClient.cancelQueries({ queryKey: ["teacher-applications"] }),
         queryClient.cancelQueries({ queryKey: ["admin"] }),
+        queryClient.cancelQueries({
+          queryKey: ["course-authoring", "courses"],
+        }),
       ]);
 
       queryClient.setQueryData(currentUserQueryKey, null);
       queryClient.removeQueries({ queryKey: ["teacher-applications"] });
       queryClient.removeQueries({ queryKey: ["admin"] });
+      queryClient.removeQueries({
+        queryKey: ["course-authoring", "courses"],
+      });
     },
   });
 }

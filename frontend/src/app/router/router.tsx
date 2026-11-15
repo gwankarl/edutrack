@@ -12,6 +12,9 @@ import TeacherApplicationPage from "../../features/teacher-applications/pages/Te
 import TeacherApplicationStatusPage from "../../features/teacher-applications/pages/TeacherApplicationStatusPage.js";
 import TeacherApplicationsPage from "../../features/administration/teacher-applications/pages/TeacherApplicationsPage.js";
 import TeacherApplicationReviewPage from "../../features/administration/teacher-applications/pages/TeacherApplicationReviewPage.js";
+import TeacherCourseDetailsPage from "../../features/course-authoring/pages/TeacherCourseDetailsPage.js";
+import TeacherCoursesPage from "../../features/course-authoring/pages/TeacherCoursesPage.js";
+import CreateCoursePage from "../../features/course-authoring/pages/CreateCoursePage.js";
 import AppLayout from "../layouts/AppLayout.js";
 import HomePage from "./HomePage.js";
 import NotFoundPage from "./NotFoundPage.js";
@@ -85,6 +88,18 @@ export const routeConfig: RouteObject[] = [
                   {
                     index: true,
                     Component: TeacherWorkspacePage,
+                  },
+                  {
+                    path: "courses",
+                    Component: TeacherCoursesPage,
+                  },
+                  {
+                    path: "courses/new",
+                    Component: CreateCoursePage,
+                  },
+                  {
+                    path: "courses/:courseId",
+                    Component: TeacherCourseDetailsPage,
                   },
                 ],
               },

@@ -14,9 +14,15 @@ export function useLogin() {
       await Promise.all([
         queryClient.cancelQueries({ queryKey: currentUserQueryKey }),
         queryClient.cancelQueries({ queryKey: ["admin"] }),
+        queryClient.cancelQueries({
+          queryKey: ["course-authoring", "courses"],
+        }),
       ]);
 
       queryClient.removeQueries({ queryKey: ["admin"] });
+      queryClient.removeQueries({
+        queryKey: ["course-authoring", "courses"],
+      });
       queryClient.setQueryData(currentUserQueryKey, null);
     },
     onSuccess: async () => {

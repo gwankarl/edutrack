@@ -7,6 +7,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { currentUserQueryKey } from "../../features/auth/hooks/auth-query-keys.js";
 import TeacherLayout from "../layouts/TeacherLayout.js";
 import TeacherWorkspacePage from "../../features/teachers/pages/TeacherWorkspacePage.js";
+import TeacherCoursesPage from "../../features/course-authoring/pages/TeacherCoursesPage.js";
+import CreateCoursePage from "../../features/course-authoring/pages/CreateCoursePage.js";
+import TeacherCourseDetailsPage from "../../features/course-authoring/pages/TeacherCourseDetailsPage.js";
 import ProtectedRoute from "./ProtectedRoute.js";
 import {
   AdministratorRouteGuard,
@@ -80,6 +83,34 @@ describe("application routes", () => {
     ).toBe(true);
     expect(matches?.at(-1)?.route.Component).toBe(TeacherWorkspacePage);
   });
+
+  it.each([
+    ["/teacher/courses", "courses", TeacherCoursesPage],
+    ["/teacher/courses/new", "courses/new", CreateCoursePage],
+    [
+      "/teacher/courses/550e8400-e29b-41d4-a716-446655440020",
+      "courses/:courseId",
+      TeacherCourseDetailsPage,
+    ],
+  ])(
+    "places %s under authentication, the Teacher role, and TeacherLayout",
+    (pathname, routePath, pageComponent) => {
+      const matches = matchRoutes(routeConfig, pathname);
+
+      expect(matches).not.toBeNull();
+      expect(
+        matches?.some((match) => match.route.Component === ProtectedRoute),
+      ).toBe(true);
+      expect(
+        matches?.some((match) => match.route.Component === TeacherRouteGuard),
+      ).toBe(true);
+      expect(
+        matches?.some((match) => match.route.Component === TeacherLayout),
+      ).toBe(true);
+      expect(matches?.at(-1)?.route.path).toBe(routePath);
+      expect(matches?.at(-1)?.route.Component).toBe(pageComponent);
+    },
+  );
 
   it.each([
     "/admin/teacher-applications",
