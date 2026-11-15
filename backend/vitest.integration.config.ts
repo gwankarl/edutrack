@@ -16,6 +16,8 @@ export default defineConfig({
       "src/modules/teachers/teacher-application-review.repository.integration.test.ts",
       "src/modules/teachers/teacher-application-decision.repository.integration.test.ts",
       "src/modules/teachers/teacher-application-decision.service.integration.test.ts",
+      "src/modules/academic-catalog/academic-catalog.repository.integration.test.ts",
+      "src/infrastructure/database/seeds/academic-catalog.seed.integration.test.ts",
     ],
     setupFiles: ["./tests/integration/setup.ts"],
     testTimeout: 15_000,

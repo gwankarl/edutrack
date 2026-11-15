@@ -75,4 +75,20 @@ export {
   type RejectTeacherApplicationRequest,
 } from "./teacher-applications/admin-decisions.js";
 
+export {
+  academicLevelListResponseSchema,
+  academicLevelResponseSchema,
+  educationStageSchema,
+  type AcademicLevelListResponse,
+  type AcademicLevelResponse,
+  type EducationStage,
+} from "./catalog/academic-levels.js";
+
+export {
+  subjectListResponseSchema,
+  subjectResponseSchema,
+  type SubjectListResponse,
+  type SubjectResponse,
+} from "./catalog/subjects.js";
+
 export { healthResponseSchema, type HealthResponse } from "./system/health.js";
