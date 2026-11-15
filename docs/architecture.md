@@ -15,7 +15,7 @@ Install dependencies from the repository root with `npm ci`. Do not create works
 ## Frontend structure
 
 - `frontend/src/app/` contains the router, application layout, entry point, and providers.
-- `frontend/src/features/{feature}/` contains feature-owned pages, components, API functions, hooks, schemas, and types. Current features include `auth` for registration, verification, recovery, and login, `account` for the user profile, and `system` for backend health.
+- `frontend/src/features/{feature}/` contains feature-owned pages, components, API functions, hooks, schemas, and types. Current features include `auth`, `account`, `system`, `teacher-applications`, `administration` for administrator review, and `teachers` for the Teacher workspace.
 - `frontend/src/components/layout/` contains shared layout components such as `Header` and `Footer`.
 - `frontend/src/lib/api/` contains the framework-independent Fetch client and API error type.
 - `frontend/src/styles/` contains the global stylesheet and Tailwind CSS v4 design tokens.
@@ -26,7 +26,7 @@ The app uses React Router client-side Data Mode. TanStack Query is provided once
 ## Backend structure
 
 - `backend/src/app/` contains Fastify application construction, module registration, and server startup.
-- `backend/src/modules/{domain}/` contains domain-owned routes, schemas, services, repositories, and tests. Current domains include `health` (`/api/v1/health`) and `identity` (`/api/v1/auth/*`).
+- `backend/src/modules/{domain}/` contains domain-owned routes, schemas, services, repositories, and tests. Current domains include `health` (`/api/v1/health`), `identity` (`/api/v1/auth/*`), and `teachers` (applicant and administrator teacher-application APIs).
 - `backend/src/infrastructure/config/` validates environment values with Zod and loads dotenv configuration.
 - `backend/src/infrastructure/logging/` configures Pino logging.
 - `backend/src/infrastructure/database/` owns the reusable `pg.Pool`, Drizzle client, and database health helpers.
@@ -48,7 +48,7 @@ The project targets PostgreSQL 18. The backend creates one configurable `pg.Pool
 - Version-controlled SQL migrations: `backend/drizzle/`.
 - Drizzle Kit configuration: `backend/drizzle.config.ts`.
 
-The identity schema currently defines `users`, `role_assignments`, `auth_sessions`, and `verification_tokens`. The checked-in migration `backend/drizzle/0000_misty_typhoid_mary.sql` creates these tables, constraints, enums, and indexes. The backend workspace scripts are:
+The identity schema defines `users`, `role_assignments`, `auth_sessions`, and `verification_tokens`. Teacher onboarding adds `teacher_applications` and `teacher_profiles`, including a one-pending-application partial unique index, one-profile-per-user uniqueness, review-state constraints, foreign keys, and status indexes. The checked-in migrations `backend/drizzle/0000_misty_typhoid_mary.sql` through `0002_slimy_george_stacy.sql` create and evolve these tables, enums, constraints, and indexes. The backend workspace scripts are:
 
 ```bash
 npm run db:generate --workspace=backend

@@ -1,8 +1,22 @@
-import { matchRoutes } from "react-router";
-import { describe, expect, it } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, screen } from "@testing-library/react";
+import { createMemoryRouter, matchRoutes } from "react-router";
+import { RouterProvider } from "react-router/dom";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { currentUserQueryKey } from "../../features/auth/hooks/auth-query-keys.js";
+import TeacherLayout from "../layouts/TeacherLayout.js";
+import TeacherWorkspacePage from "../../features/teachers/pages/TeacherWorkspacePage.js";
 import ProtectedRoute from "./ProtectedRoute.js";
-import { AdministratorRouteGuard, routeConfig } from "./router.js";
+import {
+  AdministratorRouteGuard,
+  routeConfig,
+  TeacherRouteGuard,
+} from "./router.js";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("application routes", () => {
   it.each([
@@ -51,6 +65,22 @@ describe("application routes", () => {
     ).toBe(true);
   });
 
+  it("places the Teacher landing page under authentication and Teacher role guards", () => {
+    const matches = matchRoutes(routeConfig, "/teacher");
+
+    expect(matches).not.toBeNull();
+    expect(
+      matches?.some((match) => match.route.Component === ProtectedRoute),
+    ).toBe(true);
+    expect(
+      matches?.some((match) => match.route.Component === TeacherRouteGuard),
+    ).toBe(true);
+    expect(
+      matches?.some((match) => match.route.Component === TeacherLayout),
+    ).toBe(true);
+    expect(matches?.at(-1)?.route.Component).toBe(TeacherWorkspacePage);
+  });
+
   it.each([
     "/admin/teacher-applications",
     "/admin/teacher-applications/550e8400-e29b-41d4-a716-446655440001",
@@ -71,5 +101,84 @@ describe("application routes", () => {
         ? "admin/teacher-applications"
         : "admin/teacher-applications/:applicationId",
     );
+  });
+
+  it("activates and revokes Teacher route access from refreshed backend roles without login", async () => {
+    let roles = ["student"];
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url === "/api/v1/auth/me") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: "00000000-0000-4000-8000-000000000001",
+              displayName: "Ada Teacher",
+              email: "ada@example.test",
+              emailVerified: true,
+              accountStatus: "active",
+              roles,
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        );
+      }
+
+      if (url === "/api/v1/teacher-applications/me") {
+        return Promise.resolve(
+          new Response(JSON.stringify({ application: null }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+      }
+
+      return Promise.reject(new Error(`Unexpected request: ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const router = createMemoryRouter(routeConfig, {
+      initialEntries: ["/teacher"],
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Access denied" }),
+    ).toBeVisible();
+
+    roles = ["student", "teacher"];
+    await queryClient.invalidateQueries({ queryKey: currentUserQueryKey });
+
+    expect(
+      await screen.findByRole("heading", { name: "Welcome, Ada Teacher!" }),
+    ).toBeVisible();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/auth/me",
+      expect.objectContaining({ credentials: "same-origin" }),
+    );
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "/api/v1/auth/login",
+      expect.anything(),
+    );
+
+    roles = ["student"];
+    await queryClient.invalidateQueries({ queryKey: currentUserQueryKey });
+
+    expect(
+      await screen.findByRole("heading", { name: "Access denied" }),
+    ).toBeVisible();
+    router.dispose();
+    queryClient.clear();
   });
 });

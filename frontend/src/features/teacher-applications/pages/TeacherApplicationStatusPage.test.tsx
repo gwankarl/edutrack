@@ -1,9 +1,11 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CurrentUserState } from "../../auth/hooks/useCurrentUser.js";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useCurrentUser } from "../../auth/hooks/useCurrentUser.js";
+import { currentUserQueryKey } from "../../auth/hooks/auth-query-keys.js";
 import { useMyTeacherApplication } from "../hooks/useMyTeacherApplication.js";
 import TeacherApplicationStatusPage from "./TeacherApplicationStatusPage.js";
 
@@ -39,15 +41,20 @@ const pendingApplication = {
 };
 
 function renderStatus(applicationState: unknown) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   vi.mocked(useCurrentUser).mockReturnValue(authenticatedUser);
   vi.mocked(useMyTeacherApplication).mockReturnValue(
     applicationState as unknown as ReturnType<typeof useMyTeacherApplication>,
   );
 
   return render(
-    <MemoryRouter>
-      <TeacherApplicationStatusPage />
-    </MemoryRouter>,
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>
+        <TeacherApplicationStatusPage />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 
@@ -96,5 +103,44 @@ describe("TeacherApplicationStatusPage", () => {
     expect(
       screen.getByText(/please provide more relevant experience/i),
     ).toBeTruthy();
+  });
+
+  it("refreshes current-user roles once when an application is approved", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
+    vi.mocked(useCurrentUser).mockReturnValue(authenticatedUser);
+    vi.mocked(useMyTeacherApplication).mockReturnValue({
+      authStatus: "authenticated",
+      data: {
+        application: {
+          ...pendingApplication,
+          status: "approved",
+          reviewedAt: "2026-11-15T12:00:00.000Z",
+        },
+      },
+      isError: false,
+      isPending: false,
+      isSuccess: true,
+    } as unknown as ReturnType<typeof useMyTeacherApplication>);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <TeacherApplicationStatusPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(invalidateQueries).toHaveBeenCalledWith({
+        queryKey: currentUserQueryKey,
+      });
+    });
+    expect(invalidateQueries).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole("heading", { name: "Your application was approved" }),
+    ).toBeVisible();
   });
 });

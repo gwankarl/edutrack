@@ -11,7 +11,12 @@ export function useLogin() {
     mutationKey: loginMutationKey,
     mutationFn: (request: LoginRequest) => loginUser(request),
     onMutate: async () => {
-      await queryClient.cancelQueries({ queryKey: currentUserQueryKey });
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: currentUserQueryKey }),
+        queryClient.cancelQueries({ queryKey: ["admin"] }),
+      ]);
+
+      queryClient.removeQueries({ queryKey: ["admin"] });
       queryClient.setQueryData(currentUserQueryKey, null);
     },
     onSuccess: async () => {

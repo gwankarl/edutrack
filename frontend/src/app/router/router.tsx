@@ -17,9 +17,15 @@ import HomePage from "./HomePage.js";
 import NotFoundPage from "./NotFoundPage.js";
 import ProtectedRoute from "./ProtectedRoute.js";
 import RoleGuard from "./RoleGuard.js";
+import TeacherLayout from "../layouts/TeacherLayout.js";
+import TeacherWorkspacePage from "../../features/teachers/pages/TeacherWorkspacePage.js";
 
 export function AdministratorRouteGuard() {
   return <RoleGuard allowedRoles={["administrator"]} />;
+}
+
+export function TeacherRouteGuard() {
+  return <RoleGuard allowedRoles={["teacher"]} />;
 }
 
 export const routeConfig: RouteObject[] = [
@@ -68,6 +74,21 @@ export const routeConfig: RouteObject[] = [
           {
             path: "teacher/application-status",
             Component: TeacherApplicationStatusPage,
+          },
+          {
+            Component: TeacherRouteGuard,
+            children: [
+              {
+                path: "teacher",
+                Component: TeacherLayout,
+                children: [
+                  {
+                    index: true,
+                    Component: TeacherWorkspacePage,
+                  },
+                ],
+              },
+            ],
           },
           {
             Component: AdministratorRouteGuard,

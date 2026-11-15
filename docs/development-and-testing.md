@@ -79,7 +79,7 @@ npm run test:integration --workspace=backend
 
 The integration setup refuses to run unless the URL targets exactly `edutrack_test`. The test suite includes a read-only `SELECT 1` connectivity check. Identity schema and API integration tests create synthetic records in `edutrack_test` and clean them up; they do not connect to `edutrack_dev` or production. Fastify route tests use `inject()` and do not start a listening server.
 
-The checked-in identity migration must be applied to `edutrack_test` before running the identity integration tests. CI applies migrations to its fresh, isolated PostgreSQL service before testing. For local integration testing, load the test environment and apply the migration to that database only:
+All checked-in migrations must be applied to `edutrack_test` before running identity or teacher onboarding integration tests. The test runner serializes integration-test files because they share this database. CI applies migrations to its fresh, isolated PostgreSQL service before testing. For local integration testing, load the test environment and apply the migrations to that database only:
 
 ```bash
 set -a

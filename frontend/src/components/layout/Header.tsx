@@ -4,6 +4,7 @@ import { Link, NavLink } from "react-router";
 import { useCurrentUser } from "../../features/auth/hooks/useCurrentUser.js";
 import { useMyTeacherApplication } from "../../features/teacher-applications/hooks/useMyTeacherApplication.js";
 import UserMenu from "./UserMenu.js";
+import WorkspaceSwitcher from "./WorkspaceSwitcher.js";
 
 const navLinkClassName = ({ isActive }: { isActive: boolean }) =>
   [
@@ -92,7 +93,7 @@ export default function Header() {
                 </>
               )}
           </nav>
-
+          {currentUser.status === "authenticated" && <WorkspaceSwitcher />}
           <UserMenu />
         </div>
       </div>

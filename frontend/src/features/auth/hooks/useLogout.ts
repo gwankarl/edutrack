@@ -9,12 +9,15 @@ export function useLogout() {
   return useMutation({
     mutationFn: () => logoutUser(),
     onSuccess: async () => {
-      await queryClient.cancelQueries({ queryKey: currentUserQueryKey });
-      await queryClient.cancelQueries({
-        queryKey: ["teacher-applications"],
-      });
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: currentUserQueryKey }),
+        queryClient.cancelQueries({ queryKey: ["teacher-applications"] }),
+        queryClient.cancelQueries({ queryKey: ["admin"] }),
+      ]);
+
       queryClient.setQueryData(currentUserQueryKey, null);
       queryClient.removeQueries({ queryKey: ["teacher-applications"] });
+      queryClient.removeQueries({ queryKey: ["admin"] });
     },
   });
 }

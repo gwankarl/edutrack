@@ -34,6 +34,10 @@ describe("useLogout", () => {
         status: "pending",
       },
     });
+    queryClient.setQueryData(
+      ["admin", "teacher-applications", "cached-user", "list", {}],
+      { items: ["cached-administrator-data"] },
+    );
 
     function Wrapper({ children }: PropsWithChildren) {
       return (
@@ -59,6 +63,15 @@ describe("useLogout", () => {
     expect(queryClient.getQueryData(["auth", "current-user"])).toBeNull();
     expect(
       queryClient.getQueryData(["teacher-applications", "me", "cached-user"]),
+    ).toBeUndefined();
+    expect(
+      queryClient.getQueryData([
+        "admin",
+        "teacher-applications",
+        "cached-user",
+        "list",
+        {},
+      ]),
     ).toBeUndefined();
   });
 });

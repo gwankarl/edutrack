@@ -32,6 +32,10 @@ describe("useLogin", () => {
       },
     });
     queryClient.setQueryData(currentUserQueryKey, { id: "cached-user" });
+    queryClient.setQueryData(
+      ["admin", "teacher-applications", "cached-user", "list", {}],
+      { items: ["cached-administrator-data"] },
+    );
 
     function Wrapper({ children }: PropsWithChildren) {
       return (
@@ -64,6 +68,15 @@ describe("useLogin", () => {
     );
     expect(loginResult).toEqual(responseBody);
     expect(queryClient.getQueryData(currentUserQueryKey)).toBeNull();
+    expect(
+      queryClient.getQueryData([
+        "admin",
+        "teacher-applications",
+        "cached-user",
+        "list",
+        {},
+      ]),
+    ).toBeUndefined();
     expect(queryClient.getQueryState(currentUserQueryKey)?.isInvalidated).toBe(
       true,
     );

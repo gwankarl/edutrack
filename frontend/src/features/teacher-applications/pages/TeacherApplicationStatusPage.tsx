@@ -1,8 +1,10 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, ArrowRight, BadgeCheck, Clock3 } from "lucide-react";
 import { Link } from "react-router";
 
+import { currentUserQueryKey } from "../../auth/hooks/auth-query-keys.js";
 import { useCurrentUser } from "../../auth/hooks/useCurrentUser.js";
 import { useMyTeacherApplication } from "../hooks/useMyTeacherApplication.js";
 
@@ -46,6 +48,27 @@ function StatusMessage({
 export default function TeacherApplicationStatusPage() {
   const currentUser = useCurrentUser();
   const applicationQuery = useMyTeacherApplication();
+  const queryClient = useQueryClient();
+  const application = applicationQuery.data?.application;
+  const approvedApplicationId =
+    currentUser.status === "authenticated" &&
+    !currentUser.user.roles.includes("teacher") &&
+    application?.status === "approved"
+      ? `${currentUser.user.id}:${application.id}`
+      : null;
+  const refreshedApproval = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (
+      !approvedApplicationId ||
+      refreshedApproval.current === approvedApplicationId
+    ) {
+      return;
+    }
+
+    refreshedApproval.current = approvedApplicationId;
+    void queryClient.invalidateQueries({ queryKey: currentUserQueryKey });
+  }, [approvedApplicationId, queryClient]);
 
   return (
     <main className="mx-auto w-full max-w-4xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
@@ -183,8 +206,9 @@ export default function TeacherApplicationStatusPage() {
             tone="success"
           >
             <p>
-              Your application was approved. If Teacher access is not yet
-              visible, refresh your session or sign in again.
+              Your application was approved. We&apos;re checking your updated
+              roles; the Teacher workspace will appear as soon as the backend
+              confirms Teacher access.
             </p>
           </StatusMessage>
         )}

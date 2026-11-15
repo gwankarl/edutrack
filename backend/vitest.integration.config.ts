@@ -3,6 +3,9 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "node",
+    // Integration files share edutrack_test; serialize files so global list
+    // counts and cleanup from one suite cannot race another suite.
+    fileParallelism: false,
     include: [
       "src/modules/health/health.integration.test.ts",
       "src/modules/identity/identity.repository.integration.test.ts",

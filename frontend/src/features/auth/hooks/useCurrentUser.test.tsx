@@ -143,6 +143,7 @@ describe("useCurrentUser", () => {
     const { result } = renderHook(() => useCurrentUser(), {
       wrapper: Wrapper,
     });
+    await queryClient.invalidateQueries({ queryKey: currentUserQueryKey });
 
     await waitFor(() => {
       expect(result.current.status).toBe("unauthenticated");
@@ -212,12 +213,75 @@ describe("useCurrentUser", () => {
     const { result } = renderHook(() => useCurrentUser(), {
       wrapper: Wrapper,
     });
+    await queryClient.invalidateQueries({ queryKey: currentUserQueryKey });
 
     await waitFor(() => {
       expect(result.current.status).toBe("error");
     });
     expect(result.current.user).toBeNull();
   });
+
+  it.each([
+    { previousRoles: ["student"], refreshedRoles: ["student", "teacher"] },
+    { previousRoles: ["student", "teacher"], refreshedRoles: ["student"] },
+  ])(
+    "uses refreshed backend roles instead of cached roles ($previousRoles -> $refreshedRoles)",
+    async ({ previousRoles, refreshedRoles }) => {
+      const userId = "00000000-0000-4000-8000-000000000001";
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      queryClient.setQueryData(currentUserQueryKey, {
+        id: userId,
+        displayName: "Ada Student",
+        email: "ada@example.test",
+        emailVerified: true,
+        accountStatus: "active",
+        roles: previousRoles,
+      });
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              id: userId,
+              displayName: "Ada Student",
+              email: "ada@example.test",
+              emailVerified: true,
+              accountStatus: "active",
+              roles: refreshedRoles,
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        ),
+      );
+
+      function Wrapper({ children }: PropsWithChildren) {
+        return (
+          <QueryClientProvider client={queryClient}>
+            {children}
+          </QueryClientProvider>
+        );
+      }
+
+      const { result } = renderHook(() => useCurrentUser(), {
+        wrapper: Wrapper,
+      });
+      await queryClient.invalidateQueries({ queryKey: currentUserQueryKey });
+
+      await waitFor(() => {
+        expect(result.current.status).toBe("authenticated");
+      });
+      expect(
+        result.current.status === "authenticated"
+          ? result.current.user.roles
+          : [],
+      ).toEqual(refreshedRoles);
+    },
+  );
 
   it("keeps navigation in a loading state while login replaces cached user data", async () => {
     let resolveLogin!: (response: Response) => void;

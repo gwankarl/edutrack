@@ -2,7 +2,7 @@
 
 EduTrack is a free, teacher-curated, self-paced learning platform for Cameroon's Anglophone general secondary students in Forms 3–5.
 
-The repository contains the technical foundation and the first identity workflows: registration, email verification, password recovery, login, server-managed sessions, authorization guards, and a user profile. The frontend, Fastify API, shared contracts, PostgreSQL/Drizzle infrastructure, and automated checks are organized as npm workspaces.
+The repository includes identity workflows and teacher onboarding: registration, email verification, password recovery, login, server-managed sessions, role-based access, teacher applications, administrator review, and Teacher workspace access after approval. The frontend, Fastify API, shared contracts, PostgreSQL/Drizzle infrastructure, and automated checks are organized as npm workspaces.
 
 ## Prerequisites
 
@@ -38,7 +38,7 @@ cp backend/.env.test.example backend/.env.test
 
 `backend/.env` points to the local `edutrack_dev` database. `backend/.env.test` must point to `edutrack_test`; the integration-test setup rejects any other database name. These files are ignored by Git. Do not commit credentials.
 
-Apply the checked-in identity schema migration to your local development database before using registration, sessions, or profile endpoints:
+Apply the checked-in migrations to your local development database before using identity or teacher onboarding features. The migration chain creates the identity tables, teacher applications and profiles, review constraints, and indexes:
 
 ```bash
 npm run db:migrate --workspace=backend

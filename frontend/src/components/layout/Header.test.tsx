@@ -177,6 +177,9 @@ describe("Header", () => {
     renderHeader();
 
     expect(
+      await screen.findByLabelText("Current workspace: Student Workspace"),
+    ).toBeVisible();
+    expect(
       await screen.findByRole("link", { name: "Become a Teacher" }),
     ).toHaveAttribute("href", "/teacher/apply");
     expect(
@@ -197,6 +200,51 @@ describe("Header", () => {
     expect(
       await screen.findByRole("link", { name: "Become a Teacher" }),
     ).toHaveAttribute("href", "/teacher/apply");
+  });
+
+  it("offers only assigned workspaces and switches to the Teacher landing route", async () => {
+    stubTeacherNavigation(["student", "teacher"], null);
+
+    const user = userEvent.setup();
+    renderHeader();
+
+    const switcher = await screen.findByRole("combobox", {
+      name: "Workspace",
+    });
+    expect(
+      Array.from(switcher.querySelectorAll("option")).map(
+        (option) => (option as HTMLOptionElement).value,
+      ),
+    ).toEqual(["student", "teacher"]);
+
+    await user.selectOptions(switcher, "teacher");
+
+    expect(screen.getByLabelText("Current path")).toHaveTextContent("/teacher");
+    expect(screen.getByRole("combobox", { name: "Workspace" })).toHaveValue(
+      "teacher",
+    );
+  });
+
+  it("switches Administrators to the existing review route", async () => {
+    stubTeacherNavigation(["student", "administrator"], null);
+
+    const user = userEvent.setup();
+    renderHeader();
+
+    const switcher = await screen.findByRole("combobox", {
+      name: "Workspace",
+    });
+    expect(
+      Array.from(switcher.querySelectorAll("option")).map(
+        (option) => (option as HTMLOptionElement).value,
+      ),
+    ).toEqual(["student", "administrator"]);
+
+    await user.selectOptions(switcher, "administrator");
+
+    expect(screen.getByLabelText("Current path")).toHaveTextContent(
+      "/admin/teacher-applications",
+    );
   });
 
   it("shows Application Status for an applicant with a pending application", async () => {

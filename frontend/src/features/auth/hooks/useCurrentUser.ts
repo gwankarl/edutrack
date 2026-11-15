@@ -7,6 +7,8 @@ import { currentUserQueryKey, loginMutationKey } from "./auth-query-keys.js";
 
 export { currentUserQueryKey } from "./auth-query-keys.js";
 
+const CURRENT_USER_REFRESH_INTERVAL_MS = 60_000;
+
 export type CurrentUserState =
   | { status: "loading"; user: null; error: null }
   | { status: "authenticated"; user: CurrentUserResponse; error: null }
@@ -17,6 +19,7 @@ export function useCurrentUser(): CurrentUserState {
   const loginPending = useIsMutating({ mutationKey: loginMutationKey }) > 0;
   const query = useQuery({
     queryKey: currentUserQueryKey,
+    staleTime: 30_000,
     queryFn: async (): Promise<CurrentUserResponse | null> => {
       try {
         return await getCurrentUser();
@@ -28,9 +31,22 @@ export function useCurrentUser(): CurrentUserState {
         throw error;
       }
     },
+    // Poll only while a session is authenticated. Login invalidates this query,
+    // so newly authenticated users begin receiving role refreshes immediately.
+    refetchInterval: (currentUserQuery) =>
+      currentUserQuery.state.data ? CURRENT_USER_REFRESH_INTERVAL_MS : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 
-  if (query.isPending || (query.data === null && loginPending)) {
+  // Hide cached role data while checking the backend. This makes the switcher
+  // and role guards fail closed during refresh, including paused offline fetches.
+  if (
+    query.isPending ||
+    query.isFetching ||
+    query.isPaused ||
+    (query.data === null && loginPending)
+  ) {
     return { status: "loading", user: null, error: null };
   }
 
