@@ -29,6 +29,13 @@
       "when": 1794737220433,
       "tag": "0003_rich_shard",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794904074676,
+      "tag": "0004_course_thumbnails",
+      "breakpoints": true
     }
   ]
 }

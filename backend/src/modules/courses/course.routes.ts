@@ -13,6 +13,7 @@ import {
   teacherCourseParamsSchema,
   teacherCourseResponseSchema,
   updateTeacherCourseRequestSchema,
+  teacherDashboardSummaryResponseSchema,
 } from "@edutrack/contracts";
 import type { Environment } from "../../infrastructure/config/env.js";
 import { createIdentityRepository } from "../identity/identity.repository.js";
@@ -35,7 +36,11 @@ import {
 
 type CourseManagementService = Pick<
   ReturnType<typeof createCourseService>,
-  "createCourse" | "listMyCourses" | "getMyCourse" | "updateMyCourse"
+  | "createCourse"
+  | "listMyCourses"
+  | "getMyCourse"
+  | "updateMyCourse"
+  | "getMyDashboardSummary"
 >;
 
 export interface CourseRouteServices {
@@ -289,6 +294,27 @@ export const courseRoutes: FastifyPluginAsync<CourseRouteOptions> = async (
     },
   );
 
+  app.get(
+    "/teacher/dashboard/summary",
+    { preHandler: authenticatedTeacher },
+    async (request, reply) => {
+      const userId = request.authContext?.userId;
+
+      if (!userId) {
+        return sendAuthenticationRequired(reply);
+      }
+
+      try {
+        const summary = await services.courses.getMyDashboardSummary(userId);
+
+        return reply
+          .code(200)
+          .send(teacherDashboardSummaryResponseSchema.parse(summary));
+      } catch (error) {
+        return handleCourseError(error, reply);
+      }
+    },
+  );
   app.patch(
     "/teacher/courses/:courseId",
     { preHandler: [mutationGuard, ...authenticatedTeacher] },

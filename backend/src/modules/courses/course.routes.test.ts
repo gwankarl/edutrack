@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   TeacherCourseListResponse,
   TeacherCourseResponse,
+  TeacherDashboardSummaryResponse,
 } from "@edutrack/contracts";
 import type { Environment } from "../../infrastructure/config/env.js";
 import { registerErrorHandler } from "../../shared/errors/error-handler.js";
@@ -60,6 +61,24 @@ const courseList: TeacherCourseListResponse = {
   },
 };
 
+const dashboardSummary: TeacherDashboardSummaryResponse = {
+  statusCounts: {
+    total: 4,
+    draft: 1,
+    pendingReview: 1,
+    published: 1,
+    rejected: 1,
+  },
+  recentDraftCourses: [
+    {
+      id: courseId,
+      title: course.title,
+      status: "draft",
+      updatedAt: course.updatedAt,
+    },
+  ],
+};
+
 type AuthMode = "teacher" | "student" | "unauthenticated";
 
 const apps: Array<ReturnType<typeof Fastify>> = [];
@@ -93,6 +112,7 @@ async function createHarness(authMode: AuthMode = "teacher") {
     courses: {
       createCourse: vi.fn(async () => course),
       listMyCourses: vi.fn(async () => courseList),
+      getMyDashboardSummary: vi.fn(async () => dashboardSummary),
       getMyCourse: vi.fn(async () => course),
       updateMyCourse: vi.fn(async () => course),
     },
@@ -154,6 +174,7 @@ describe("course routes", () => {
     expect(response.json()).toEqual(courseList);
     expect(services.courses.listMyCourses).toHaveBeenCalledWith(userId, {
       status: "draft",
+      sort: "updated_desc",
       page: 1,
       pageSize: 20,
     });
@@ -169,9 +190,80 @@ describe("course routes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(services.courses.listMyCourses).toHaveBeenCalledWith(userId, {
+      sort: "updated_desc",
       page: 1,
       pageSize: 20,
     });
+  });
+
+  it("parses and forwards search, status, sorting, and pagination", async () => {
+    const { app, services } = await createHarness();
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/teacher/courses?search=%20Algebra%20&status=rejected&sort=title_asc&page=2&pageSize=5",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(services.courses.listMyCourses).toHaveBeenCalledWith(userId, {
+      search: "Algebra",
+      status: "rejected",
+      sort: "title_asc",
+      page: 2,
+      pageSize: 5,
+    });
+  });
+
+  it("returns a summary for the authenticated teacher without accepting a teacher ID", async () => {
+    const { app, services } = await createHarness();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/teacher/dashboard/summary?teacherId=another-user",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(dashboardSummary);
+    expect(services.courses.getMyDashboardSummary).toHaveBeenCalledWith(userId);
+    expect(response.body).not.toContain("teacherId");
+  });
+
+  it("requires an authenticated Teacher for the dashboard summary", async () => {
+    const unauthenticated = await createHarness("unauthenticated");
+    const student = await createHarness("student");
+
+    const unauthenticatedResponse = await unauthenticated.app.inject({
+      method: "GET",
+      url: "/api/v1/teacher/dashboard/summary",
+    });
+    const forbiddenResponse = await student.app.inject({
+      method: "GET",
+      url: "/api/v1/teacher/dashboard/summary",
+    });
+
+    expect(unauthenticatedResponse.statusCode).toBe(401);
+    expect(forbiddenResponse.statusCode).toBe(403);
+    expect(
+      unauthenticated.services.courses.getMyDashboardSummary,
+    ).not.toHaveBeenCalled();
+    expect(student.services.courses.getMyDashboardSummary).not.toHaveBeenCalled();
+  });
+
+  it("does not expose database details when dashboard retrieval fails", async () => {
+    const { app, services } = await createHarness();
+    vi.mocked(services.courses.getMyDashboardSummary).mockRejectedValue(
+      new Error("Synthetic private database diagnostic."),
+    );
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/teacher/dashboard/summary",
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(response.headers["content-type"]).toContain(
+      "application/problem+json",
+    );
+    expect(response.body).not.toContain("Synthetic private database diagnostic.");
   });
 
   it("retrieves an owned course", async () => {
@@ -225,6 +317,18 @@ describe("course routes", () => {
       method: "GET",
       url: "/api/v1/teacher/courses?page=0",
     });
+    const blankSearch = await app.inject({
+      method: "GET",
+      url: "/api/v1/teacher/courses?search=%20%20",
+    });
+    const excessiveSearch = await app.inject({
+      method: "GET",
+      url: `/api/v1/teacher/courses?search=${"a".repeat(161)}`,
+    });
+    const invalidSort = await app.inject({
+      method: "GET",
+      url: "/api/v1/teacher/courses?sort=arbitrary",
+    });
     const invalidId = await app.inject({
       method: "GET",
       url: "/api/v1/teacher/courses/not-a-uuid",
@@ -238,6 +342,9 @@ describe("course routes", () => {
 
     expect(invalidBody.statusCode).toBe(400);
     expect(invalidQuery.statusCode).toBe(400);
+    expect(blankSearch.statusCode).toBe(400);
+    expect(excessiveSearch.statusCode).toBe(400);
+    expect(invalidSort.statusCode).toBe(400);
     expect(invalidId.statusCode).toBe(400);
     expect(invalidPatch.statusCode).toBe(400);
     expect(services.courses.updateMyCourse).not.toHaveBeenCalled();

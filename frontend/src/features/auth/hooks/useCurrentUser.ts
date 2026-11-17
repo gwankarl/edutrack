@@ -39,15 +39,18 @@ export function useCurrentUser(): CurrentUserState {
     refetchOnWindowFocus: true,
   });
 
-  // Hide cached role data while checking the backend. This makes the switcher
-  // and role guards fail closed during refresh, including paused offline fetches.
-  if (
-    query.isPending ||
-    query.isFetching ||
-    query.isPaused ||
-    (query.data === null && loginPending)
-  ) {
+  // Keep the last successful identity visible during background refreshes.
+  // A 401 still resolves to null in queryFn and immediately signs the user out.
+  if (query.data === null && loginPending) {
     return { status: "loading", user: null, error: null };
+  }
+
+  if (query.data === null) {
+    return { status: "unauthenticated", user: null, error: null };
+  }
+
+  if (query.data !== undefined) {
+    return { status: "authenticated", user: query.data, error: null };
   }
 
   if (query.isError) {
@@ -59,14 +62,6 @@ export function useCurrentUser(): CurrentUserState {
           ? query.error
           : new Error("Unable to load the current user."),
     };
-  }
-
-  if (query.data === null) {
-    return { status: "unauthenticated", user: null, error: null };
-  }
-
-  if (query.data !== undefined) {
-    return { status: "authenticated", user: query.data, error: null };
   }
 
   return { status: "loading", user: null, error: null };

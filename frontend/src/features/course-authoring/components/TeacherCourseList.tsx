@@ -1,30 +1,13 @@
-import { ChevronLeft, ChevronRight, Eye } from "lucide-react";
-import { Link } from "react-router";
+import { useState } from "react";
+import { ChevronLeft, ChevronRight, Grid2X2, List } from "lucide-react";
 import type {
   TeacherCourseListResponse,
   TeacherCourseResponse,
 } from "@edutrack/contracts";
 
-const statusLabels: Record<TeacherCourseResponse["status"], string> = {
-  draft: "Draft",
-  pending_review: "Pending review",
-  published: "Published",
-  rejected: "Rejected",
-};
+import CourseCard from "./CourseCard.js";
 
-const statusClasses: Record<TeacherCourseResponse["status"], string> = {
-  draft: "bg-info-surface text-info",
-  pending_review: "bg-warning-surface text-warning",
-  published: "bg-success-surface text-success",
-  rejected: "bg-danger-surface text-danger",
-};
-
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
+type CourseView = "grid" | "list";
 
 export interface TeacherCourseListProps {
   courses: readonly TeacherCourseResponse[];
@@ -39,95 +22,73 @@ export default function TeacherCourseList({
   isFetching,
   onPageChange,
 }: TeacherCourseListProps) {
+  const [view, setView] = useState<CourseView>("grid");
+
   return (
     <section aria-label="Your courses" className="space-y-4">
-      <div
-        aria-label="Courses table"
-        className="overflow-x-auto rounded-lg border border-border bg-surface"
-        role="region"
-        tabIndex={0}
-      >
-        <table className="w-full min-w-[56rem] border-collapse text-left">
-          <caption className="sr-only">Your courses</caption>
-          <thead className="bg-surface-muted text-sm text-muted-foreground">
-            <tr>
-              <th className="px-4 py-3 font-semibold" scope="col">
-                Course
-              </th>
-              <th className="px-4 py-3 font-semibold" scope="col">
-                Academic level
-              </th>
-              <th className="px-4 py-3 font-semibold" scope="col">
-                Subject
-              </th>
-              <th className="px-4 py-3 font-semibold" scope="col">
-                Status
-              </th>
-              <th className="px-4 py-3 font-semibold" scope="col">
-                Created
-              </th>
-              <th className="px-4 py-3 font-semibold" scope="col">
-                Last updated
-              </th>
-              <th className="px-4 py-3 font-semibold" scope="col">
-                <span className="sr-only">Course actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {courses.map((course) => (
-              <tr key={course.id}>
-                <th
-                  className="max-w-64 px-4 py-4 text-left font-semibold text-foreground"
-                  scope="row"
-                >
-                  <span className="block truncate">{course.title}</span>
-                </th>
-                <td className="px-4 py-4 text-muted-foreground">
-                  {course.academicLevel.name}
-                </td>
-                <td className="px-4 py-4 text-muted-foreground">
-                  {course.subject.name}
-                </td>
-                <td className="px-4 py-4">
-                  <span
-                    className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClasses[course.status]}`}
-                  >
-                    {statusLabels[course.status]}
-                  </span>
-                </td>
-                <td className="whitespace-nowrap px-4 py-4 text-sm text-muted-foreground">
-                  <time dateTime={course.createdAt}>
-                    {formatDate(course.createdAt)}
-                  </time>
-                </td>
-                <td className="whitespace-nowrap px-4 py-4 text-sm text-muted-foreground">
-                  <time dateTime={course.updatedAt}>
-                    {formatDate(course.updatedAt)}
-                  </time>
-                </td>
-                <td className="whitespace-nowrap px-4 py-4">
-                  <Link
-                    aria-label={`View details for ${course.title}`}
-                    className="inline-flex min-h-10 items-center gap-2 font-semibold text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-                    to={`/teacher/courses/${encodeURIComponent(course.id)}`}
-                  >
-                    <Eye aria-hidden="true" className="size-4" />
-                    View details
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-muted-foreground">
+          {pagination.totalItems}{" "}
+          {pagination.totalItems === 1 ? "course" : "courses"}
+        </p>
+
+        <div
+          aria-label="Course presentation"
+          className="inline-flex self-start rounded-md border border-border bg-surface p-1"
+          role="group"
+        >
+          <button
+            aria-pressed={view === "grid"}
+            className="inline-flex min-h-10 items-center gap-2 rounded px-3 font-medium text-foreground hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus aria-pressed:bg-primary aria-pressed:text-inverse"
+            onClick={() => setView("grid")}
+            type="button"
+          >
+            <Grid2X2 aria-hidden="true" className="size-4" />
+            Grid
+          </button>
+          <button
+            aria-pressed={view === "list"}
+            className="inline-flex min-h-10 items-center gap-2 rounded px-3 font-medium text-foreground hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus aria-pressed:bg-primary aria-pressed:text-inverse"
+            onClick={() => setView("list")}
+            type="button"
+          >
+            <List aria-hidden="true" className="size-4" />
+            List
+          </button>
+        </div>
       </div>
+
+      <p aria-live="polite" className="sr-only" role="status">
+        {view === "grid" ? "Grid view selected." : "List view selected."}
+      </p>
+
+      {view === "grid" ? (
+        <ul
+          aria-label="Courses in grid view"
+          className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"
+        >
+          {courses.map((course) => (
+            <li className="min-w-0" key={course.id}>
+              <CourseCard course={course} view="grid" />
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <ul aria-label="Courses in list view" className="min-w-0 space-y-4">
+          {courses.map((course) => (
+            <li className="min-w-0" key={course.id}>
+              <CourseCard course={course} view="list" />
+            </li>
+          ))}
+        </ul>
+      )}
 
       <nav
         aria-label="Course pages"
         className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between"
       >
         <p aria-live="polite" className="text-sm text-muted-foreground">
-          Page {pagination.page} of {pagination.totalPages} ·{" "}
+          Page {pagination.page} of {pagination.totalPages} —{" "}
           {pagination.totalItems} courses
         </p>
         <div className="flex gap-2">

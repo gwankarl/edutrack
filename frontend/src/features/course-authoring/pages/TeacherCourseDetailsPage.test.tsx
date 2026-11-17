@@ -1,22 +1,41 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { MemoryRouter, Route, Routes, useSearchParams } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TeacherCourseResponse } from "@edutrack/contracts";
 
 import { ApiError } from "../../../lib/api/api-error.js";
 import { useTeacherCourse } from "../hooks/useTeacherCourse.js";
+import { useCourseTopics } from "../hooks/useCourseTopics.js";
 import TeacherCourseDetailsPage from "./TeacherCourseDetailsPage.js";
 
 vi.mock("../hooks/useTeacherCourse.js", () => ({
   useTeacherCourse: vi.fn(),
 }));
 
+vi.mock("../hooks/useCourseTopics.js", () => ({
+  useCourseTopics: vi.fn(),
+}));
+
 vi.mock("../components/CourseForm.js", () => ({
-  default: ({ initialCourse }: { initialCourse?: TeacherCourseResponse }) => (
-    <p data-testid="course-editor">
-      {initialCourse ? `Editing ${initialCourse.title}` : "Course editor"}
-    </p>
+  default: ({
+    initialCourse,
+    onUpdated,
+  }: {
+    initialCourse?: TeacherCourseResponse;
+    onUpdated?: (course: TeacherCourseResponse) => void;
+  }) => (
+    <div data-testid="course-editor">
+      <p>
+        {initialCourse ? `Editing ${initialCourse.title}` : "Course editor"}
+      </p>
+      {initialCourse && (
+        <button onClick={() => onUpdated?.(initialCourse)} type="button">
+          Save test course
+        </button>
+      )}
+    </div>
   ),
 }));
 
@@ -43,6 +62,15 @@ const course = {
 } satisfies TeacherCourseResponse;
 
 const mockedUseTeacherCourse = vi.mocked(useTeacherCourse);
+const mockedUseCourseTopics = vi.mocked(useCourseTopics);
+
+function SearchParamsOutput() {
+  const [searchParams] = useSearchParams();
+
+  return (
+    <output data-testid="current-search">{searchParams.toString()}</output>
+  );
+}
 
 function courseQuery(overrides: Record<string, unknown> = {}) {
   return {
@@ -56,6 +84,21 @@ function courseQuery(overrides: Record<string, unknown> = {}) {
     refetch: vi.fn(),
     ...overrides,
   } as unknown as ReturnType<typeof useTeacherCourse>;
+}
+
+function topicsQuery(overrides: Record<string, unknown> = {}) {
+  return {
+    data: { items: [] },
+    error: null,
+    isPending: false,
+    isError: false,
+    isFetching: false,
+    isSuccess: true,
+    authorizationStatus: "authorized",
+    validationError: null,
+    refetch: vi.fn(),
+    ...overrides,
+  } as unknown as ReturnType<typeof useCourseTopics>;
 }
 
 function renderPage(path = `/teacher/courses/${course.id}`) {
@@ -72,6 +115,7 @@ function renderPage(path = `/teacher/courses/${course.id}`) {
             element={<TeacherCourseDetailsPage />}
           />
         </Routes>
+        <SearchParamsOutput />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -81,18 +125,106 @@ describe("TeacherCourseDetailsPage", () => {
   beforeEach(() => {
     mockedUseTeacherCourse.mockReset();
     mockedUseTeacherCourse.mockReturnValue(courseQuery());
+    mockedUseCourseTopics.mockReset();
+    mockedUseCourseTopics.mockReturnValue(topicsQuery());
   });
 
-  it("shows course details and offers the edit form for Draft courses", () => {
+  it("shows the course workspace, breadcrumb, Overview, and Draft editor", async () => {
+    const user = userEvent.setup();
     renderPage();
 
     expect(
-      screen.getByRole("heading", { name: "Course details", level: 1 }),
+      screen.getByRole("heading", {
+        name: "Algebra Foundations",
+        level: 1,
+      }),
     ).toBeVisible();
-    expect(screen.getByText("Algebra Foundations")).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Back to My Courses" }),
+    ).toHaveAttribute("href", "/teacher/courses");
+    expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(
+      screen.getByRole("heading", { name: "Algebra Foundations", level: 1 }),
+    ).toBeVisible();
+    expect(screen.getByRole("link", { name: "Manage topics" })).toHaveAttribute(
+      "href",
+      `/teacher/courses/${course.id}/topics`,
+    );
+    expect(screen.queryByTestId("course-editor")).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Edit Course Details" }),
+    );
     expect(screen.getByTestId("course-editor")).toHaveTextContent(
       "Editing Algebra Foundations",
     );
+  });
+
+  it("closes after an update and preserves the Overview tab URL", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(
+      screen.getByRole("button", { name: "Edit Course Details" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Save test course" }));
+
+    expect(screen.getByText("Course details saved.")).toBeVisible();
+    expect(screen.queryByTestId("course-editor")).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(
+      new URLSearchParams(
+        screen.getByTestId("current-search").textContent ?? "",
+      ).has("tab"),
+    ).toBe(false);
+  });
+
+  it("shows the expandable Course Content tree and synchronizes its URL tab", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole("tab", { name: "Course Content" }));
+
+    expect(screen.getByRole("tab", { name: "Course Content" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("tabpanel")).toHaveTextContent("Topics");
+    expect(screen.getByRole("link", { name: "Add Topic" })).toHaveAttribute(
+      "href",
+      `/teacher/courses/${course.id}/topics/new`,
+    );
+    expect(
+      new URLSearchParams(
+        screen.getByTestId("current-search").textContent ?? "",
+      ).get("tab"),
+    ).toBe("content");
+  });
+
+  it("restores a selected workspace tab from the URL", () => {
+    renderPage(`/teacher/courses/${course.id}?tab=publication`);
+
+    expect(screen.getByRole("tab", { name: "Publication" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("tabpanel")).toHaveTextContent(
+      "Final submission eligibility",
+    );
+    expect(
+      screen.getByRole("button", {
+        name: /Submit for Review.*Coming Soon/i,
+      }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("link", { name: "Back to My Courses" }),
+    ).toHaveAttribute("href", "/teacher/courses");
   });
 
   it("keeps non-Draft courses read-only", () => {
@@ -102,8 +234,14 @@ describe("TeacherCourseDetailsPage", () => {
 
     renderPage();
 
-    expect(screen.getAllByText("Published")).toHaveLength(2);
+    expect(screen.getByLabelText("Course status: Published")).toHaveTextContent(
+      "Published",
+    );
     expect(screen.getByText("This course is read-only")).toBeVisible();
+    expect(screen.getByRole("link", { name: "View topics" })).toHaveAttribute(
+      "href",
+      `/teacher/courses/${course.id}/topics`,
+    );
     expect(screen.queryByTestId("course-editor")).not.toBeInTheDocument();
   });
 
@@ -122,6 +260,7 @@ describe("TeacherCourseDetailsPage", () => {
     );
     renderPage();
     expect(screen.getByText("Teacher access required")).toBeVisible();
+    expect(screen.queryByText("Algebra Foundations")).not.toBeInTheDocument();
   });
 
   it("offers sign in for an unauthenticated user", () => {

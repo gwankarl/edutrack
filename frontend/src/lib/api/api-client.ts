@@ -120,10 +120,15 @@ export async function apiRequest<TResponse>(
 
   const { method = "GET", body, headers: requestHeaders, signal } = options;
   const headers = new Headers(requestHeaders);
+  const isMultipart =
+    typeof FormData !== "undefined" && body instanceof FormData;
 
   headers.set("Accept", "application/json");
 
-  if (body !== undefined && !headers.has("Content-Type")) {
+  if (isMultipart) {
+    // The browser must set the multipart boundary.
+    headers.delete("Content-Type");
+  } else if (body !== undefined && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
 
@@ -133,7 +138,12 @@ export async function apiRequest<TResponse>(
     response = await fetch(path, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body:
+        body === undefined
+          ? undefined
+          : isMultipart
+            ? (body as FormData)
+            : JSON.stringify(body),
       credentials: "same-origin",
       signal,
     });

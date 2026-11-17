@@ -180,18 +180,20 @@ describe("useCurrentUser", () => {
     expect(result.current.error).toBeInstanceOf(Error);
   });
 
-  it("does not expose cached user data after a current-user refresh fails", async () => {
+  it("preserves the last authenticated user when a background refresh fails", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    queryClient.setQueryData(currentUserQueryKey, {
+    const cachedUser = {
       id: "00000000-0000-4000-8000-000000000001",
       displayName: "Ada Student",
       email: "ada@example.test",
       emailVerified: true,
-      accountStatus: "active",
-      roles: ["student"],
-    });
+      accountStatus: "active" as const,
+      roles: ["student"] as const,
+    };
+
+    queryClient.setQueryData(currentUserQueryKey, cachedUser);
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -213,12 +215,20 @@ describe("useCurrentUser", () => {
     const { result } = renderHook(() => useCurrentUser(), {
       wrapper: Wrapper,
     });
+
     await queryClient.invalidateQueries({ queryKey: currentUserQueryKey });
 
     await waitFor(() => {
-      expect(result.current.status).toBe("error");
+      expect(queryClient.getQueryState(currentUserQueryKey)?.status).toBe(
+        "error",
+      );
     });
-    expect(result.current.user).toBeNull();
+
+    expect(result.current).toMatchObject({
+      status: "authenticated",
+      user: cachedUser,
+      error: null,
+    });
   });
 
   it.each([

@@ -1,9 +1,11 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import {
   TEACHER_COURSE_DEFAULT_PAGE,
   TEACHER_COURSE_DEFAULT_PAGE_SIZE,
+  COURSE_SEARCH_MAX_LENGTH,
   courseStatusSchema,
+  teacherCourseSortSchema,
   type CourseStatus,
 } from "@edutrack/contracts";
 import {
@@ -12,6 +14,8 @@ import {
   LoaderCircle,
   Plus,
   RefreshCw,
+  Search,
+  X,
 } from "lucide-react";
 import { Link, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -22,12 +26,20 @@ import { useTeacherCourses } from "../hooks/useTeacherCourses.js";
 import TeacherCourseList from "../components/TeacherCourseList.js";
 
 type CourseStatusFilter = CourseStatus | "all";
+type CourseSort = (typeof teacherCourseSortSchema.options)[number];
 
 const statusLabels: Record<CourseStatus, string> = {
   draft: "Draft",
   pending_review: "Pending review",
   published: "Published",
   rejected: "Rejected",
+};
+
+const sortLabels: Record<CourseSort, string> = {
+  updated_desc: "Recently updated",
+  created_desc: "Recently created",
+  title_asc: "Title: A to Z",
+  title_desc: "Title: Z to A",
 };
 
 function Notice({
@@ -54,6 +66,8 @@ function Notice({
 export default function TeacherCoursesPage() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
+  const searchFromUrl = searchParams.get("search") ?? "";
+  const [searchInput, setSearchInput] = useState(searchFromUrl);
 
   const parsedStatus = courseStatusSchema.safeParse(searchParams.get("status"));
   const status: CourseStatusFilter = parsedStatus.success
@@ -64,17 +78,54 @@ export default function TeacherCoursesPage() {
     Number.isSafeInteger(requestedPage) && requestedPage >= 1
       ? requestedPage
       : TEACHER_COURSE_DEFAULT_PAGE;
+  const parsedSort = teacherCourseSortSchema.safeParse(searchParams.get("sort"));
+  const sort: CourseSort = parsedSort.success
+    ? parsedSort.data
+    : "updated_desc";
+
+  useEffect(() => {
+    setSearchInput(searchFromUrl);
+  }, [searchFromUrl]);
+
+  useEffect(() => {
+    const normalizedSearch = searchInput.trim();
+
+    if (normalizedSearch === searchFromUrl) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      const nextParams = new URLSearchParams(searchParams);
+
+      if (normalizedSearch) {
+        nextParams.set("search", normalizedSearch);
+      } else {
+        nextParams.delete("search");
+      }
+
+      nextParams.delete("page");
+      setSearchParams(nextParams, { replace: true });
+    }, 300);
+
+    return () => window.clearTimeout(timeout);
+  }, [searchFromUrl, searchInput, searchParams, setSearchParams]);
 
   const filters: TeacherCourseListFilters = {
     page,
     pageSize: TEACHER_COURSE_DEFAULT_PAGE_SIZE,
     ...(status === "all" ? {} : { status }),
+    ...(searchFromUrl ? { search: searchFromUrl } : {}),
+    sort,
   };
+  const hasActiveFilters =
+    status !== "all" || Boolean(searchFromUrl || searchInput.trim()) || sort !== "updated_desc";
   const coursesQuery = useTeacherCourses(filters);
 
   function updateListLocation(
     nextStatus: CourseStatusFilter,
     nextPage: number,
+    nextSearch = searchFromUrl,
+    nextSort = sort,
   ) {
     const nextParams = new URLSearchParams(searchParams);
 
@@ -84,10 +135,34 @@ export default function TeacherCoursesPage() {
       nextParams.set("status", nextStatus);
     }
 
+    const normalizedSearch = nextSearch.trim();
+    if (normalizedSearch) {
+      nextParams.set("search", normalizedSearch);
+    } else {
+      nextParams.delete("search");
+    }
+
+    if (nextSort === "updated_desc") {
+      nextParams.delete("sort");
+    } else {
+      nextParams.set("sort", nextSort);
+    }
+
     if (nextPage <= TEACHER_COURSE_DEFAULT_PAGE) {
       nextParams.delete("page");
     } else {
       nextParams.set("page", String(nextPage));
+    }
+
+    setSearchParams(nextParams);
+  }
+
+  function clearFilters() {
+    setSearchInput("");
+    const nextParams = new URLSearchParams(searchParams);
+
+    for (const key of ["search", "status", "sort", "page"]) {
+      nextParams.delete(key);
     }
 
     setSearchParams(nextParams);
@@ -131,16 +206,12 @@ export default function TeacherCoursesPage() {
     if (!coursesQuery.data || coursesQuery.data.items.length === 0) {
       return (
         <Notice
-          title={
-            status === "all"
-              ? "No courses yet"
-              : `No ${statusLabels[status]} courses`
-          }
+          title={hasActiveFilters ? "No courses match these filters" : "No courses yet"}
         >
           <p>
-            {status === "all"
+            {!hasActiveFilters
               ? "Create a course to start organizing your teaching materials."
-              : `There are no ${statusLabels[status].toLowerCase()} courses on this page.`}
+              : "Try changing your search or filters, or clear them to see all courses."}
           </p>
         </Notice>
       );
@@ -150,7 +221,9 @@ export default function TeacherCoursesPage() {
       <TeacherCourseList
         courses={coursesQuery.data.items}
         isFetching={coursesQuery.isFetching}
-        onPageChange={(nextPage) => updateListLocation(status, nextPage)}
+        onPageChange={(nextPage) =>
+          updateListLocation(status, nextPage, searchFromUrl, sort)
+        }
         pagination={coursesQuery.data.pagination}
       />
     );
@@ -241,33 +314,96 @@ export default function TeacherCoursesPage() {
       </header>
 
       <section aria-label="Course filters and results" className="space-y-5">
-        <div className="flex flex-col gap-2 sm:max-w-xs">
-          <label
-            className="flex items-center gap-2 text-sm font-semibold text-foreground"
-            htmlFor="teacher-course-status-filter"
-          >
-            <ListFilter aria-hidden="true" className="size-4 text-primary" />
-            Filter by status
-          </label>
-          <select
-            className="min-h-11 rounded-md border border-border bg-surface px-3 text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-            id="teacher-course-status-filter"
-            onChange={(event) =>
-              updateListLocation(
-                event.target.value as CourseStatusFilter,
-                TEACHER_COURSE_DEFAULT_PAGE,
-              )
-            }
-            value={status}
-          >
-            <option value="all">All courses</option>
-            {courseStatusSchema.options.map((courseStatus) => (
-              <option key={courseStatus} value={courseStatus}>
-                {statusLabels[courseStatus]}
-              </option>
-            ))}
-          </select>
+        <div className="grid min-w-0 gap-4 md:grid-cols-3">
+          <div className="space-y-2">
+            <label
+              className="flex items-center gap-2 text-sm font-semibold text-foreground"
+              htmlFor="teacher-course-search"
+            >
+              <Search aria-hidden="true" className="size-4 text-primary" />
+              Search course titles
+            </label>
+            <input
+              autoComplete="off"
+              className="min-h-11 w-full rounded-md border border-border bg-surface px-3 text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+              id="teacher-course-search"
+              maxLength={COURSE_SEARCH_MAX_LENGTH}
+              onChange={(event) => setSearchInput(event.target.value)}
+              placeholder="Search your courses"
+              type="search"
+              value={searchInput}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label
+              className="flex items-center gap-2 text-sm font-semibold text-foreground"
+              htmlFor="teacher-course-status-filter"
+            >
+              <ListFilter aria-hidden="true" className="size-4 text-primary" />
+              Filter by status
+            </label>
+            <select
+              className="min-h-11 w-full rounded-md border border-border bg-surface px-3 text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+              id="teacher-course-status-filter"
+              onChange={(event) =>
+                updateListLocation(
+                  event.target.value as CourseStatusFilter,
+                  TEACHER_COURSE_DEFAULT_PAGE,
+                  searchInput,
+                  sort,
+                )
+              }
+              value={status}
+            >
+              <option value="all">All courses</option>
+              {courseStatusSchema.options.map((courseStatus) => (
+                <option key={courseStatus} value={courseStatus}>
+                  {statusLabels[courseStatus]}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <label
+              className="text-sm font-semibold text-foreground"
+              htmlFor="teacher-course-sort"
+            >
+              Sort courses
+            </label>
+            <select
+              className="min-h-11 w-full rounded-md border border-border bg-surface px-3 text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+              id="teacher-course-sort"
+              onChange={(event) =>
+                updateListLocation(
+                  status,
+                  TEACHER_COURSE_DEFAULT_PAGE,
+                  searchInput,
+                  event.target.value as CourseSort,
+                )
+              }
+              value={sort}
+            >
+              {teacherCourseSortSchema.options.map((option) => (
+                <option key={option} value={option}>
+                  {sortLabels[option]}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
+
+        {hasActiveFilters ? (
+          <button
+            className="inline-flex min-h-11 items-center gap-2 rounded-md border border-border px-4 font-semibold text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+            onClick={clearFilters}
+            type="button"
+          >
+            <X aria-hidden="true" className="size-4" />
+            Clear filters
+          </button>
+        ) : null}
 
         {renderContent()}
       </section>

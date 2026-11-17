@@ -3,20 +3,33 @@ import {
   COURSE_TITLE_MAX_LENGTH,
   createTeacherCourseRequestSchema,
   updateTeacherCourseRequestSchema,
+  type CourseThumbnailResponse,
   type AcademicLevelResponse,
   type CreateTeacherCourseRequest,
   type SubjectResponse,
   type TeacherCourseResponse,
 } from "@edutrack/contracts";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { AlertCircle, BookOpen, LoaderCircle, RefreshCw } from "lucide-react";
-import { useEffect, useRef } from "react";
+import {
+  AlertCircle,
+  BookOpen,
+  LoaderCircle,
+  RefreshCw,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { useAcademicCatalog } from "../../catalog/hooks/useAcademicCatalog.js";
 import { useCreateCourse } from "../hooks/useCreateCourse.js";
 import { useUpdateCourse } from "../hooks/useUpdateCourse.js";
+import CourseThumbnailField, {
+  type CourseThumbnailSelection,
+} from "./CourseThumbnailField.js";
+import {
+  useRemoveCourseThumbnail,
+  useUploadCourseThumbnail,
+} from "../hooks/useCourseThumbnail.js";
 
 const courseFormSchema = z
   .object({
@@ -49,6 +62,12 @@ interface CourseFormProps {
   onUpdated?: (course: TeacherCourseResponse) => void;
 }
 
+interface PendingThumbnailOperation {
+  kind: "create" | "edit";
+  course: TeacherCourseResponse;
+  file: File | null;
+}
+
 const fieldClassName =
   "min-h-11 w-full rounded-md border border-border bg-background px-3 py-2 text-foreground shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus aria-[invalid=true]:border-danger disabled:cursor-not-allowed disabled:opacity-60";
 
@@ -75,6 +94,26 @@ function safeCourseErrorMessage(error: unknown, editing: boolean): string {
   return editing
     ? "We couldn't save your course changes. Please try again."
     : "We couldn't create your course. Please try again.";
+}
+
+function safeThumbnailErrorMessage(error: unknown): string {
+  const status =
+    typeof error === "object" && error !== null && "status" in error
+      ? error.status
+      : null;
+
+  if (status === 401) return "Your session expired. Sign in and try again.";
+  if (status === 403) {
+    return "You no longer have permission to change this image.";
+  }
+  if (status === 404) return "This course is no longer available.";
+  if (status === 409) {
+    return "This course is no longer a draft. Refresh its details.";
+  }
+  if (status === 413) return "The image must be 5 MB or smaller.";
+  if (status === 400) return "Choose a valid JPEG, PNG, or WebP image.";
+
+  return "The image change could not be completed. Your course is saved; try the image operation again.";
 }
 
 function CatalogError({ onRetry }: { onRetry: () => void }) {
@@ -131,6 +170,16 @@ export default function CourseForm({
   const catalog = useAcademicCatalog();
   const createCourse = useCreateCourse();
   const updateCourse = useUpdateCourse();
+  const uploadThumbnail = useUploadCourseThumbnail();
+  const removeThumbnail = useRemoveCourseThumbnail();
+  const [thumbnailSelection, setThumbnailSelection] =
+    useState<CourseThumbnailSelection>({
+      file: null,
+      removeExisting: false,
+    });
+  const [pendingThumbnailOperation, setPendingThumbnailOperation] =
+    useState<PendingThumbnailOperation | null>(null);
+  const [thumbnailError, setThumbnailError] = useState<string | null>(null);
   const isEditing = initialCourse !== undefined;
   const initializedCourseId = useRef<string | null>(null);
   const levels = catalog.data?.academicLevels ?? [];
@@ -175,29 +224,106 @@ export default function CourseForm({
   }, [catalog.data, initialCourse, reset]);
 
   const mutation = isEditing ? updateCourse : createCourse;
-  const isBusy = isSubmitting || mutation.isPending;
+  const isEditable = !initialCourse || initialCourse.status === "draft";
+  const isUploading = uploadThumbnail.isPending || removeThumbnail.isPending;
+  const isBusy =
+    isSubmitting ||
+    mutation.isPending ||
+    isUploading ||
+    pendingThumbnailOperation !== null;
 
-  function submitCourse(values: CourseFormOutput) {
+  async function completeThumbnailOperation(
+    operation: PendingThumbnailOperation,
+  ) {
+    setThumbnailError(null);
+
+    try {
+      let thumbnail: CourseThumbnailResponse | null;
+
+      if (operation.file) {
+        thumbnail = await uploadThumbnail.mutateAsync({
+          courseId: operation.course.id,
+          file: operation.file,
+        });
+      } else {
+        await removeThumbnail.mutateAsync({ courseId: operation.course.id });
+        thumbnail = null;
+      }
+
+      const completedCourse = { ...operation.course, thumbnail };
+      setPendingThumbnailOperation(null);
+      setThumbnailSelection({ file: null, removeExisting: false });
+
+      if (operation.kind === "create") {
+        onCreated?.(completedCourse);
+      } else {
+        onUpdated?.(completedCourse);
+      }
+    } catch (error) {
+      setThumbnailError(safeThumbnailErrorMessage(error));
+    }
+  }
+
+  async function submitCourse(values: CourseFormOutput) {
+    if (!isEditable || pendingThumbnailOperation) return;
+
     createCourse.reset();
     updateCourse.reset();
+    uploadThumbnail.reset();
+    removeThumbnail.reset();
+    setThumbnailError(null);
 
     if (initialCourse) {
-      const input = updateTeacherCourseRequestSchema.parse({
-        ...values,
-        description: values.description ?? null,
-      });
+      let savedCourse: TeacherCourseResponse;
 
-      updateCourse.mutate(
-        { courseId: initialCourse.id, input },
-        { onSuccess: (course) => onUpdated?.(course) },
-      );
+      try {
+        const input = updateTeacherCourseRequestSchema.parse({
+          ...values,
+          description: values.description ?? null,
+        });
+        savedCourse = await updateCourse.mutateAsync({
+          courseId: initialCourse.id,
+          input,
+        });
+      } catch {
+        return;
+      }
+
+      if (thumbnailSelection.file || thumbnailSelection.removeExisting) {
+        const operation: PendingThumbnailOperation = {
+          kind: "edit",
+          course: savedCourse,
+          file: thumbnailSelection.file,
+        };
+        setPendingThumbnailOperation(operation);
+        await completeThumbnailOperation(operation);
+      } else {
+        onUpdated?.(savedCourse);
+      }
       return;
     }
 
-    const input = createTeacherCourseRequestSchema.parse(values);
-    createCourse.mutate(input, {
-      onSuccess: (course) => onCreated?.(course),
-    });
+    let createdCourse: TeacherCourseResponse;
+
+    try {
+      const input = createTeacherCourseRequestSchema.parse(values);
+      createdCourse = await createCourse.mutateAsync(input);
+    } catch {
+      return;
+    }
+
+    if (thumbnailSelection.file) {
+      const operation: PendingThumbnailOperation = {
+        kind: "create",
+        course: createdCourse,
+        file: thumbnailSelection.file,
+      };
+      setPendingThumbnailOperation(operation);
+      await completeThumbnailOperation(operation);
+      return;
+    }
+
+    onCreated?.(createdCourse);
   }
 
   return (
@@ -222,7 +348,7 @@ export default function CourseForm({
           aria-invalid={Boolean(errors.title)}
           autoComplete="off"
           className={fieldClassName}
-          disabled={catalogUnavailable}
+          disabled={catalogUnavailable || isBusy || !isEditable}
           id="course-title"
           maxLength={COURSE_TITLE_MAX_LENGTH}
           required
@@ -255,7 +381,7 @@ export default function CourseForm({
           }
           aria-invalid={Boolean(errors.description)}
           className={`${fieldClassName} min-h-32 resize-y`}
-          disabled={catalogUnavailable}
+          disabled={catalogUnavailable || isBusy || !isEditable}
           id="course-description"
           maxLength={COURSE_DESCRIPTION_MAX_LENGTH}
           rows={5}
@@ -322,7 +448,7 @@ export default function CourseForm({
             }
             aria-invalid={Boolean(errors.academicLevelId)}
             className={fieldClassName}
-            disabled={catalogUnavailable}
+            disabled={catalogUnavailable || isBusy || !isEditable}
             id="course-academic-level"
             required
           >
@@ -356,7 +482,7 @@ export default function CourseForm({
             }
             aria-invalid={Boolean(errors.subjectId)}
             className={fieldClassName}
-            disabled={catalogUnavailable}
+            disabled={catalogUnavailable || isBusy || !isEditable}
             id="course-subject"
             required
           >
@@ -374,6 +500,49 @@ export default function CourseForm({
         </div>
       </div>
 
+      <CourseThumbnailField
+        currentThumbnail={initialCourse?.thumbnail}
+        disabled={isBusy || !isEditable}
+        onChange={setThumbnailSelection}
+      />
+
+      {!isEditable && (
+        <p
+          className="rounded-md border border-border bg-surface p-4 text-sm text-muted-foreground"
+          role="status"
+        >
+          Only Draft courses can be edited.
+        </p>
+      )}
+
+      {isUploading && (
+        <p
+          aria-live="polite"
+          className="text-sm text-muted-foreground"
+          role="status"
+        >
+          {pendingThumbnailOperation?.file
+            ? "Uploading course image…"
+            : "Removing course image…"}
+        </p>
+      )}
+
+      {thumbnailError && (
+        <div aria-live="polite" className="space-y-3" role="alert">
+          <p className="text-sm text-danger">{thumbnailError}</p>
+          {pendingThumbnailOperation && (
+            <button
+              className="inline-flex min-h-11 items-center gap-2 rounded-md border border-border px-4 font-semibold text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={isUploading}
+              onClick={() => void completeThumbnailOperation(pendingThumbnailOperation)}
+              type="button"
+            >
+              Retry image operation
+            </button>
+          )}
+        </div>
+      )}
+
       <p className="flex items-start gap-2 rounded-md border border-border bg-info-surface p-4 text-sm leading-6 text-foreground">
         <BookOpen
           aria-hidden="true"
@@ -385,16 +554,20 @@ export default function CourseForm({
 
       <button
         className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 font-semibold text-inverse hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-        disabled={isBusy || catalogUnavailable}
+        disabled={isBusy || catalogUnavailable || !isEditable}
         type="submit"
       >
         {isBusy && (
           <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
         )}
         {isBusy
-          ? isEditing
-            ? "Saving changes…"
-            : "Creating course…"
+          ? isUploading
+            ? "Saving course image…"
+            : pendingThumbnailOperation
+              ? "Image retry required"
+              : isEditing
+              ? "Saving changes…"
+              : "Creating course…"
           : isEditing
             ? "Save changes"
             : "Create course"}
@@ -410,7 +583,7 @@ export default function CourseForm({
           {safeCourseErrorMessage(mutation.error, isEditing)}
         </p>
       )}
-      {mutation.isSuccess && (
+      {mutation.isSuccess && !thumbnailError && !pendingThumbnailOperation && (
         <p aria-live="polite" className="text-sm text-success" role="status">
           {isEditing
             ? "Course changes saved."

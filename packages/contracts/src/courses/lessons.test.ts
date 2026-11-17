@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  LESSON_CONTENT_MAX_BYTES,
   createTeacherLessonRequestSchema,
   reorderTeacherLessonsRequestSchema,
   teacherCourseTopicLessonParamsSchema,
   teacherLessonListResponseSchema,
   teacherLessonResponseSchema,
+  tiptapLessonDocumentSchema,
   updateTeacherLessonRequestSchema,
 } from "./lessons.js";
 
@@ -40,6 +42,99 @@ describe("teacher lesson contracts", () => {
       title: "Introduction",
       content: { blocks: [{ type: "paragraph", text: "Welcome." }] },
     });
+  });
+
+  it("accepts bounded structured Tiptap content with text, tables, and math", () => {
+    const document = {
+      type: "doc",
+      content: [
+        {
+          type: "heading",
+          attrs: { level: 2 },
+          content: [{ type: "text", text: "Linear equations" }],
+        },
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "Solve " },
+            { type: "inlineMath", attrs: { latex: "x+2=5" } },
+          ],
+        },
+        {
+          type: "table",
+          content: [
+            {
+              type: "tableRow",
+              content: [
+                { type: "tableHeader", content: [{ type: "paragraph" }] },
+                { type: "tableCell", content: [{ type: "paragraph" }] },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(tiptapLessonDocumentSchema.parse(document)).toEqual(document);
+    expect(
+      createTeacherLessonRequestSchema.safeParse({
+        title: "Equations",
+        content: document,
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects unsafe links, non-HTTPS image sources, unknown nodes, and oversized content", () => {
+    const unsafeLink = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            {
+              type: "text",
+              text: "bad link",
+              marks: [
+                { type: "link", attrs: { href: "javascript:alert(1)" } },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const unsafeImage = {
+      type: "doc",
+      content: [{ type: "image", attrs: { src: "data:image/svg+xml,evil" } }],
+    };
+
+    expect(tiptapLessonDocumentSchema.safeParse(unsafeLink).success).toBe(false);
+    expect(tiptapLessonDocumentSchema.safeParse(unsafeImage).success).toBe(false);
+    expect(
+      tiptapLessonDocumentSchema.safeParse({
+        type: "doc",
+        content: [
+          { type: "image", attrs: { src: "https://tracking.example.test/pixel" } },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      tiptapLessonDocumentSchema.safeParse({
+        type: "doc",
+        content: [{ type: "image", attrs: { src: "/uploads/diagram.webp" } }],
+      }).success,
+    ).toBe(true);
+    expect(
+      tiptapLessonDocumentSchema.safeParse({
+        type: "doc",
+        content: [{ type: "script", attrs: { src: "https://example.test/x" } }],
+      }).success,
+    ).toBe(false);
+    expect(
+      tiptapLessonDocumentSchema.safeParse({
+        type: "doc",
+        content: [{ type: "text", text: "x".repeat(LESSON_CONTENT_MAX_BYTES) }],
+      }).success,
+    ).toBe(false);
   });
 
   it("rejects blank titles, non-object content, and server-controlled fields", () => {

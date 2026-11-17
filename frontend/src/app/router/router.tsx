@@ -15,6 +15,10 @@ import TeacherApplicationReviewPage from "../../features/administration/teacher-
 import TeacherCourseDetailsPage from "../../features/course-authoring/pages/TeacherCourseDetailsPage.js";
 import TeacherCoursesPage from "../../features/course-authoring/pages/TeacherCoursesPage.js";
 import CreateCoursePage from "../../features/course-authoring/pages/CreateCoursePage.js";
+import CourseTopicsPage from "../../features/course-authoring/pages/CourseTopicsPage.js";
+import TopicDetailsPage from "../../features/course-authoring/pages/TopicDetailsPage.js";
+import LessonEditorPage from "../../features/course-authoring/pages/LessonEditorPage.js";
+import QuizEditorPage from "../../features/course-authoring/pages/QuizEditorPage.js";
 import AppLayout from "../layouts/AppLayout.js";
 import HomePage from "./HomePage.js";
 import NotFoundPage from "./NotFoundPage.js";
@@ -100,6 +104,34 @@ export const routeConfig: RouteObject[] = [
                   {
                     path: "courses/:courseId",
                     Component: TeacherCourseDetailsPage,
+                  },
+                  {
+                    path: "courses/:courseId/topics",
+                    Component: CourseTopicsPage,
+                  },
+                  {
+                    path: "courses/:courseId/topics/new",
+                    Component: TopicDetailsPage,
+                  },
+                  {
+                    path: "courses/:courseId/topics/:topicId",
+                    Component: TopicDetailsPage,
+                  },
+                  {
+                    path: "courses/:courseId/topics/:topicId/quizzes/new",
+                    Component: QuizEditorPage,
+                  },
+                  {
+                    path: "courses/:courseId/topics/:topicId/quizzes/:quizId",
+                    Component: QuizEditorPage,
+                  },
+                  {
+                    path: "courses/:courseId/topics/:topicId/lessons/new",
+                    Component: LessonEditorPage,
+                  },
+                  {
+                    path: "courses/:courseId/topics/:topicId/lessons/:lessonId",
+                    Component: LessonEditorPage,
                   },
                 ],
               },

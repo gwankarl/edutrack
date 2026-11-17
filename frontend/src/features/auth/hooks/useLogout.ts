@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { logoutUser } from "../api/auth.api.js";
 import { currentUserQueryKey } from "./auth-query-keys.js";
+import { teacherDashboardSummaryQueryKeys } from "../../teachers/hooks/teacher-dashboard-query-keys.js";
 
 export function useLogout() {
   const queryClient = useQueryClient();
@@ -16,6 +17,9 @@ export function useLogout() {
         queryClient.cancelQueries({
           queryKey: ["course-authoring", "courses"],
         }),
+        queryClient.cancelQueries({
+          queryKey: teacherDashboardSummaryQueryKeys.all,
+        }),
       ]);
 
       queryClient.setQueryData(currentUserQueryKey, null);
@@ -23,6 +27,9 @@ export function useLogout() {
       queryClient.removeQueries({ queryKey: ["admin"] });
       queryClient.removeQueries({
         queryKey: ["course-authoring", "courses"],
+      });
+      queryClient.removeQueries({
+        queryKey: teacherDashboardSummaryQueryKeys.all,
       });
     },
   });

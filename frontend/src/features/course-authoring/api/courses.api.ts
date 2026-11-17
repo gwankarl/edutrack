@@ -5,12 +5,15 @@ import {
   teacherCourseParamsSchema,
   teacherCourseResponseSchema,
   updateTeacherCourseRequestSchema,
+  courseThumbnailResponseSchema,
+  type CourseThumbnailResponse,
   type CreateTeacherCourseRequest,
   type TeacherCourseListQuery,
   type TeacherCourseListResponse,
   type TeacherCourseResponse,
   type UpdateTeacherCourseRequest,
 } from "@edutrack/contracts";
+import { z } from "zod";
 
 import { ApiError } from "../../../lib/api/api-error.js";
 import { apiRequest } from "../../../lib/api/api-client.js";
@@ -21,6 +24,10 @@ export type TeacherCourseListFilters = Partial<TeacherCourseListQuery>;
 interface ParsableSchema<T> {
   parse(value: unknown): T;
 }
+
+const thumbnailUploadResponseSchema = z
+  .object({ thumbnail: courseThumbnailResponseSchema })
+  .strict();
 
 function parseResponse<T>(
   schema: ParsableSchema<T>,
@@ -75,6 +82,14 @@ export async function listTeacherCourses(
     searchParams.set("status", query.status);
   }
 
+  if (query.search) {
+    searchParams.set("search", query.search);
+  }
+
+  if (query.sort !== "updated_desc") {
+    searchParams.set("sort", query.sort);
+  }
+
   const path = `/api/v1/teacher/courses?${searchParams.toString()}` as ApiPath;
   const response = await apiRequest<unknown>(path);
 
@@ -113,4 +128,34 @@ export async function updateTeacherCourse(
     response,
     "The server returned an unexpected course response.",
   );
+}
+
+export async function uploadTeacherCourseThumbnail(
+  courseId: string,
+  file: File,
+): Promise<CourseThumbnailResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await apiRequest<unknown>(
+    `${coursePath(courseId)}/thumbnail` as ApiPath,
+    {
+      method: "POST",
+      body: formData,
+    },
+  );
+
+  return parseResponse(
+    thumbnailUploadResponseSchema,
+    response,
+    "The server returned an unexpected thumbnail response.",
+  ).thumbnail;
+}
+
+export async function removeTeacherCourseThumbnail(
+  courseId: string,
+): Promise<void> {
+  await apiRequest<void>(`${coursePath(courseId)}/thumbnail` as ApiPath, {
+    method: "DELETE",
+  });
 }

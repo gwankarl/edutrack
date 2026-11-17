@@ -13,6 +13,7 @@ import { lessonRoutes } from "../modules/courses/lesson.routes.js";
 import { quizRoutes } from "../modules/courses/quiz.routes.js";
 import { quizQuestionRoutes } from "../modules/courses/quiz-question.routes.js";
 import { quizOptionRoutes } from "../modules/courses/quiz-option.routes.js";
+import { courseThumbnailRoutes } from "../modules/courses/course-thumbnail.routes.js";
 
 import type { AppDependencies } from "./create-app.js";
 
@@ -47,6 +48,11 @@ export async function registerModules(
   });
 
   await app.register(courseRoutes, {
+    prefix: "/api/v1",
+    environment,
+  });
+
+  await app.register(courseThumbnailRoutes, {
     prefix: "/api/v1",
     environment,
   });

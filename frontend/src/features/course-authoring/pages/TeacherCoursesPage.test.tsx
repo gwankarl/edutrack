@@ -108,7 +108,7 @@ describe("TeacherCoursesPage", () => {
     );
     expect(
       screen.getByRole("link", {
-        name: "View details for Introduction to Algebra",
+        name: "Continue editing: Introduction to Algebra",
       }),
     ).toHaveAttribute(
       "href",
@@ -117,6 +117,7 @@ describe("TeacherCoursesPage", () => {
     expect(mockedUseTeacherCourses).toHaveBeenCalledWith({
       page: 1,
       pageSize: 20,
+      sort: "updated_desc",
     });
   });
 
@@ -128,6 +129,7 @@ describe("TeacherCoursesPage", () => {
       page: 3,
       pageSize: 20,
       status: "published",
+      sort: "updated_desc",
     });
 
     await user.selectOptions(
@@ -140,12 +142,94 @@ describe("TeacherCoursesPage", () => {
         page: 1,
         pageSize: 20,
         status: "rejected",
+        sort: "updated_desc",
       });
     });
     expect(screen.getByTestId("search-params")).toHaveTextContent(
       "status=rejected",
     );
     expect(screen.getByTestId("search-params")).not.toHaveTextContent("page=");
+  });
+
+  it("debounces title search, synchronizes it to the URL, and resets pagination", async () => {
+    const user = userEvent.setup();
+    renderPage("/teacher/courses?status=draft&page=3");
+
+    await user.type(
+      screen.getByRole("searchbox", { name: "Search course titles" }),
+      "  Algebra  ",
+    );
+
+    await waitFor(
+      () => {
+        expect(screen.getByTestId("search-params")).toHaveTextContent(
+          "search=Algebra",
+        );
+        expect(screen.getByTestId("search-params")).toHaveTextContent(
+          "status=draft",
+        );
+        expect(screen.getByTestId("search-params")).not.toHaveTextContent(
+          "page=",
+        );
+        expect(mockedUseTeacherCourses).toHaveBeenLastCalledWith({
+          page: 1,
+          pageSize: 20,
+          status: "draft",
+          search: "Algebra",
+          sort: "updated_desc",
+        });
+      },
+      { timeout: 2_000 },
+    );
+  });
+
+  it("preserves search and resets pagination when the status changes", async () => {
+    const user = userEvent.setup();
+    renderPage("/teacher/courses?search=Algebra&page=4");
+
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Filter by status" }),
+      "rejected",
+    );
+
+    await waitFor(() => {
+      expect(mockedUseTeacherCourses).toHaveBeenLastCalledWith({
+        page: 1,
+        pageSize: 20,
+        status: "rejected",
+        search: "Algebra",
+        sort: "updated_desc",
+      });
+    });
+    expect(screen.getByTestId("search-params")).toHaveTextContent(
+      "search=Algebra",
+    );
+    expect(screen.getByTestId("search-params")).toHaveTextContent(
+      "status=rejected",
+    );
+    expect(screen.getByTestId("search-params")).not.toHaveTextContent("page=");
+  });
+
+  it("synchronizes sort to the URL and resets pagination", async () => {
+    const user = userEvent.setup();
+    renderPage("/teacher/courses?page=2");
+
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Sort courses" }),
+      "title_asc",
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("search-params")).toHaveTextContent(
+        "sort=title_asc",
+      );
+      expect(screen.getByTestId("search-params")).not.toHaveTextContent("page=");
+      expect(mockedUseTeacherCourses).toHaveBeenLastCalledWith({
+        page: 1,
+        pageSize: 20,
+        sort: "title_asc",
+      });
+    });
   });
 
   it("shows a loading state", () => {
@@ -174,9 +258,65 @@ describe("TeacherCoursesPage", () => {
       }),
     );
 
-    renderPage();
-    expect(screen.getByText("No courses yet")).toBeVisible();
+    renderPage("/teacher/courses?search=missing");
+    expect(screen.getByText("No courses match these filters")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Clear filters" })).toBeVisible();
     expect(screen.getByRole("link", { name: "Create Course" })).toBeVisible();
+  });
+
+  it("shows the first-course state when the teacher has no courses", () => {
+    mockedUseTeacherCourses.mockReturnValue(
+      createQueryResult({
+        data: {
+          items: [],
+          pagination: {
+            page: 1,
+            pageSize: 20,
+            totalItems: 0,
+            totalPages: 0,
+          },
+        },
+      }),
+    );
+
+    renderPage();
+
+    expect(screen.getByText("No courses yet")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Create Course" })).toHaveAttribute(
+      "href",
+      "/teacher/courses/new",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Clear filters" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("clears search and status filters from the URL", async () => {
+    const user = userEvent.setup();
+    mockedUseTeacherCourses.mockReturnValue(
+      createQueryResult({
+        data: {
+          items: [],
+          pagination: {
+            page: 1,
+            pageSize: 20,
+            totalItems: 0,
+            totalPages: 0,
+          },
+        },
+      }),
+    );
+
+    renderPage("/teacher/courses?search=missing&status=draft&page=2");
+    await user.click(screen.getByRole("button", { name: "Clear filters" }));
+
+    expect(screen.getByTestId("search-params")).toBeEmptyDOMElement();
+    expect(screen.getByRole("searchbox", { name: "Search course titles" })).toHaveValue("");
+    expect(mockedUseTeacherCourses).toHaveBeenLastCalledWith({
+      page: 1,
+      pageSize: 20,
+      sort: "updated_desc",
+    });
   });
 
   it("shows a retry action after a course request fails", async () => {

@@ -40,7 +40,11 @@ function LocationProbe() {
   return <output data-testid="current-path">{location.pathname}</output>;
 }
 
-function renderSwitcher(initialPath = "/", initialRoles?: string[]) {
+function renderSwitcher(
+  initialPath = "/",
+  initialRoles?: string[],
+  onWorkspaceChange?: () => void,
+) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -60,7 +64,7 @@ function renderSwitcher(initialPath = "/", initialRoles?: string[]) {
   const view = render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[initialPath]}>
-        <WorkspaceSwitcher />
+        <WorkspaceSwitcher onWorkspaceChange={onWorkspaceChange} />
         <LocationProbe />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -93,6 +97,21 @@ describe("WorkspaceSwitcher", () => {
       ),
     ).toEqual(["student", "teacher", "administrator"]);
     expect(select).toHaveValue("student");
+    expect(select.id).not.toBe("");
+    expect(document.querySelector(`label[for="${select.id}"]`)).not.toBeNull();
+  });
+
+  it("selects Teacher for nested course, topic, lesson, and quiz routes", async () => {
+    stubCurrentUser(["student", "teacher"]);
+
+    renderSwitcher(
+      "/teacher/courses/course-id/topics/topic-id/lessons/lesson-id/quizzes/quiz-id",
+      ["student", "teacher"],
+    );
+
+    expect(
+      await screen.findByRole("combobox", { name: "Workspace" }),
+    ).toHaveValue("teacher");
   });
 
   it("adds the Teacher workspace only after the refreshed user response grants the role", async () => {
@@ -171,26 +190,24 @@ describe("WorkspaceSwitcher", () => {
     expect(select).not.toBeInTheDocument();
   });
 
-  it("hides cached workspace access while backend roles are being refreshed", async () => {
+  it("keeps the current workspace stable during refresh and updates when roles change", async () => {
     let resolveRefresh!: (response: Response) => void;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(
-        () =>
-          new Promise<Response>((resolve) => {
-            resolveRefresh = resolve;
-          }),
-      ),
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveRefresh = resolve;
+        }),
     );
+    vi.stubGlobal("fetch", fetchMock);
 
     const { queryClient } = renderSwitcher("/teacher", ["student", "teacher"]);
     void queryClient.invalidateQueries({ queryKey: currentUserQueryKey });
 
-    expect(await screen.findByText("Loading workspaces...")).toBeVisible();
-    expect(screen.queryByRole("combobox", { name: "Workspace" })).toBeNull();
-    expect(
-      screen.queryByRole("option", { name: "Teacher Workspace" }),
-    ).toBeNull();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(screen.getByRole("combobox", { name: "Workspace" })).toHaveValue(
+      "teacher",
+    );
+    expect(screen.queryByText("Loading workspaces...")).toBeNull();
 
     resolveRefresh(
       new Response(
@@ -215,7 +232,8 @@ describe("WorkspaceSwitcher", () => {
     stubCurrentUser(["student", "teacher"]);
 
     const user = userEvent.setup();
-    renderSwitcher("/");
+    const onWorkspaceChange = vi.fn();
+    renderSwitcher("/", undefined, onWorkspaceChange);
 
     await user.selectOptions(
       await screen.findByRole("combobox", { name: "Workspace" }),
@@ -226,12 +244,14 @@ describe("WorkspaceSwitcher", () => {
     expect(screen.getByRole("combobox", { name: "Workspace" })).toHaveValue(
       "teacher",
     );
+    expect(onWorkspaceChange).toHaveBeenCalledTimes(1);
   });
 
   it("does not navigate to a workspace absent from the user's roles", async () => {
     stubCurrentUser(["student", "teacher"]);
 
-    renderSwitcher("/");
+    const onWorkspaceChange = vi.fn();
+    renderSwitcher("/", undefined, onWorkspaceChange);
 
     const select = await screen.findByRole("combobox", { name: "Workspace" });
     expect(
@@ -243,6 +263,7 @@ describe("WorkspaceSwitcher", () => {
     fireEvent.change(select, { target: { value: "administrator" } });
 
     expect(screen.getByTestId("current-path")).toHaveTextContent("/");
+    expect(onWorkspaceChange).not.toHaveBeenCalled();
   });
 
   it("selects Teacher when the URL is the Teacher workspace landing route", async () => {

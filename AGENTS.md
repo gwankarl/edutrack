@@ -23,6 +23,10 @@ Use synthetic demonstration accounts and data.
 - Include directory and file creation commands when needed.
 - Provide verification commands and expected results.
 - The user performs all code changes.
+- For every new file, provide Git Bash commands to create its parent directories if it does not exists and file. provide its clickable VS Code link when the contents of the file needs to be created
+- For every existing file requiring edits, inspect it and provide a clickable link pointing to the exact line that needs modification.
+- Provide separate file-and-line links for multiple edit locations.
+- Include complete code snippets and verification commands.
 
 ### Implementation Mode (Explicit Only)
 

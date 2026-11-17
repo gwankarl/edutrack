@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
+import { teacherLessonResponseSchema } from "@edutrack/contracts";
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
@@ -228,6 +229,47 @@ describe("lesson repository", () => {
         fixture.teacherId,
       ),
     ).resolves.toEqual([]);
+  });
+
+  it("persists and returns structured Tiptap JSONB lesson content", async () => {
+    const fixture = await createTeacherFixture();
+    const document = {
+      type: "doc",
+      content: [
+        {
+          type: "heading",
+          attrs: { level: 2 },
+          content: [{ type: "text", text: "Solving equations" }],
+        },
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "Find the value of " },
+            { type: "inlineMath", attrs: { latex: "x+2=5" } },
+          ],
+        },
+      ],
+    };
+
+    const result = await repository.createLesson(
+      fixture.courseId,
+      fixture.topicId,
+      fixture.teacherId,
+      { title: "Structured equation lesson", content: document },
+    );
+
+    if (result.kind !== "created") {
+      throw new Error(`Expected lesson creation, received ${result.kind}.`);
+    }
+    expect(teacherLessonResponseSchema.parse(result.lesson).content).toEqual(
+      document,
+    );
+
+    const persisted = await pool.query<{ content: unknown }>(
+      "SELECT content FROM lessons WHERE id = $1",
+      [result.lesson.id],
+    );
+    expect(persisted.rows[0]?.content).toEqual(document);
   });
 
   it("retrieves only lessons in the requested owned course and topic", async () => {

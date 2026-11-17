@@ -5,6 +5,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { currentUserQueryKey } from "../../auth/hooks/auth-query-keys.js";
+import { teacherDashboardSummaryQueryKeys } from "../../teachers/hooks/teacher-dashboard-query-keys.js";
 import { useCreateCourse } from "./useCreateCourse.js";
 import { useTeacherCourse } from "./useTeacherCourse.js";
 import {
@@ -93,7 +94,12 @@ describe("useTeacherCourses", () => {
     };
     const fetchMock = stubJsonResponse(response);
     const { queryClient, Wrapper } = createWrapper(teacher);
-    const filters = { status: "draft" as const, page: 2, pageSize: 10 };
+    const filters = {
+      status: "draft" as const,
+      sort: "updated_desc" as const,
+      page: 2,
+      pageSize: 10,
+    };
 
     const { result } = renderHook(() => useTeacherCourses(filters), {
       wrapper: Wrapper,
@@ -117,6 +123,44 @@ describe("useTeacherCourses", () => {
         "550e8400-e29b-41d4-a716-446655440099",
         filters,
       ),
+    ).not.toEqual(teacherCourseQueryKeys.list(userId, filters));
+  });
+
+  it("includes search and sort in the request and teacher-scoped query key", async () => {
+    const response = {
+      items: [course],
+      pagination: {
+        page: 2,
+        pageSize: 10,
+        totalItems: 1,
+        totalPages: 1,
+      },
+    };
+    const fetchMock = stubJsonResponse(response);
+    const { queryClient, Wrapper } = createWrapper(teacher);
+    const filters = {
+      search: "Algebra",
+      status: "draft" as const,
+      sort: "title_asc" as const,
+      page: 2,
+      pageSize: 10,
+    };
+
+    const { result } = renderHook(() => useTeacherCourses(filters), {
+      wrapper: Wrapper,
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/teacher/courses?page=2&pageSize=10&status=draft&search=Algebra&sort=title_asc",
+      expect.objectContaining({ credentials: "same-origin" }),
+    );
+    expect(
+      queryClient.getQueryData(teacherCourseQueryKeys.list(userId, filters)),
+    ).toEqual(response);
+    expect(
+      teacherCourseQueryKeys.list("another-user", filters),
     ).not.toEqual(teacherCourseQueryKeys.list(userId, filters));
   });
 
@@ -179,6 +223,8 @@ describe("course mutations", () => {
     const fetchMock = stubJsonResponse(course, 201);
     const { queryClient, Wrapper } = createWrapper(teacher);
     const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const dashboardKey = teacherDashboardSummaryQueryKeys.forUser(userId);
+    queryClient.setQueryData(dashboardKey, { cached: "dashboard-summary" });
     const { result } = renderHook(() => useCreateCourse(), {
       wrapper: Wrapper,
     });
@@ -205,6 +251,7 @@ describe("course mutations", () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: teacherCourseQueryKeys.lists(userId),
     });
+    expect(queryClient.getQueryState(dashboardKey)?.isInvalidated).toBe(true);
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
   });
 
@@ -212,6 +259,8 @@ describe("course mutations", () => {
     const fetchMock = stubJsonResponse(course);
     const { queryClient, Wrapper } = createWrapper(teacher);
     const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const dashboardKey = teacherDashboardSummaryQueryKeys.forUser(userId);
+    queryClient.setQueryData(dashboardKey, { cached: "dashboard-summary" });
     const { result } = renderHook(() => useUpdateCourse(), {
       wrapper: Wrapper,
     });
@@ -236,6 +285,7 @@ describe("course mutations", () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: teacherCourseQueryKeys.lists(userId),
     });
+    expect(queryClient.getQueryState(dashboardKey)?.isInvalidated).toBe(true);
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
   });
 

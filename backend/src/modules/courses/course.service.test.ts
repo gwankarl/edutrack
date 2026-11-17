@@ -5,6 +5,7 @@ import type {
   SubjectResponse,
   TeacherCourseListResponse,
   TeacherCourseResponse,
+  TeacherDashboardSummaryResponse,
 } from "@edutrack/contracts";
 import type { UserRole } from "../../infrastructure/database/schema/role-assignments.js";
 import type { UpdateTeacherCourseResult } from "./course.repository.js";
@@ -63,10 +64,29 @@ const courseList: TeacherCourseListResponse = {
   },
 };
 
+const dashboardSummary: TeacherDashboardSummaryResponse = {
+  statusCounts: {
+    total: 4,
+    draft: 1,
+    pendingReview: 1,
+    published: 1,
+    rejected: 1,
+  },
+  recentDraftCourses: [
+    {
+      id: courseId,
+      title: course.title,
+      status: "draft",
+      updatedAt: course.updatedAt,
+    },
+  ],
+};
+
 function makeService() {
   const courseRepository = {
     createCourse: vi.fn(async () => course),
     listTeacherCourses: vi.fn(async () => courseList),
+    getTeacherDashboardSummary: vi.fn(async () => dashboardSummary),
     getTeacherCourseById: vi.fn(
       async (): Promise<TeacherCourseResponse | null> => course,
     ),
@@ -254,9 +274,34 @@ describe("course service", () => {
       teacherId,
       {
         status: "draft",
+        sort: "updated_desc",
         page: 2,
         pageSize: 10,
       },
+    );
+  });
+
+  it("returns the dashboard summary scoped to the authenticated teacher profile", async () => {
+    const { service, courseRepository, teacherProfileRepository } =
+      makeService();
+
+    await expect(service.getMyDashboardSummary(userId)).resolves.toEqual(
+      dashboardSummary,
+    );
+    expect(teacherProfileRepository.findByUserId).toHaveBeenCalledWith(userId);
+    expect(courseRepository.getTeacherDashboardSummary).toHaveBeenCalledWith(
+      teacherId,
+    );
+  });
+
+  it("propagates dashboard repository failures", async () => {
+    const { service, courseRepository } = makeService();
+    courseRepository.getTeacherDashboardSummary.mockRejectedValue(
+      new Error("Synthetic repository failure."),
+    );
+
+    await expect(service.getMyDashboardSummary(userId)).rejects.toThrow(
+      "Synthetic repository failure.",
     );
   });
 

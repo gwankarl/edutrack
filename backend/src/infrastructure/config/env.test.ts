@@ -34,4 +34,24 @@ describe("loadEnvironment", () => {
       }),
     ).toThrow();
   });
+
+  it("accepts Cloudinary settings only when the complete credential set is present", () => {
+    expect(() =>
+      loadEnvironment({
+        DATABASE_URL:
+          "postgresql://edutrack:replace-me@localhost:5432/edutrack",
+        CLOUDINARY_CLOUD_NAME: "demo-cloud",
+        CLOUDINARY_API_KEY: "demo-key",
+        CLOUDINARY_API_SECRET: "demo-secret",
+      }),
+    ).not.toThrow();
+
+    expect(() =>
+      loadEnvironment({
+        DATABASE_URL:
+          "postgresql://edutrack:replace-me@localhost:5432/edutrack",
+        CLOUDINARY_CLOUD_NAME: "demo-cloud",
+      }),
+    ).toThrow();
+  });
 });

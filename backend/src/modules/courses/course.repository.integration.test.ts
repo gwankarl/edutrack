@@ -3,6 +3,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
+import { teacherCourseResponseSchema } from "@edutrack/contracts";
 import { loadEnvironment } from "../../infrastructure/config/env.js";
 import { createDatabase } from "../../infrastructure/database/client.js";
 import { createDatabasePool } from "../../infrastructure/database/pool.js";
@@ -207,6 +208,56 @@ describe("course repository", () => {
     expect(course).not.toHaveProperty("teacherId");
   });
 
+  it("returns public thumbnail data without exposing Cloudinary storage identifiers", async () => {
+    const fixture = await createTeacherFixture();
+    const created = await createTestCourse(
+      fixture,
+      "Synthetic thumbnail course",
+    );
+    const publicId = `edutrack/course-thumbnails/${testCode()}`;
+    const assetId = randomUUID();
+
+    await pool.query(
+      `UPDATE courses
+       SET thumbnail_public_id = $2,
+           thumbnail_asset_id = $3,
+           thumbnail_secure_url = $4,
+           thumbnail_width = 1280,
+           thumbnail_height = 720,
+           thumbnail_format = 'webp'
+       WHERE id = $1`,
+      [
+        created.id,
+        publicId,
+        assetId,
+        "https://res.cloudinary.com/demo/image/upload/course.webp",
+      ],
+    );
+
+    const course = await repository.getTeacherCourseById(
+      created.id,
+      fixture.teacherId,
+    );
+
+    expect(course?.thumbnail).toEqual({
+      url: "https://res.cloudinary.com/demo/image/upload/course.webp",
+      width: 1280,
+      height: 720,
+      format: "webp",
+    });
+    expect(() => teacherCourseResponseSchema.parse(course)).not.toThrow();
+    for (const field of [
+      "thumbnailPublicId",
+      "thumbnailAssetId",
+      "thumbnailSecureUrl",
+      "thumbnailWidth",
+      "thumbnailHeight",
+      "thumbnailFormat",
+    ]) {
+      expect(course).not.toHaveProperty(field);
+    }
+  });
+
   it("rejects catalog IDs that do not exist in PostgreSQL", async () => {
     const fixture = await createTeacherFixture();
 
@@ -275,7 +326,7 @@ describe("course repository", () => {
     const expectedOrder = await pool.query<{ id: string }>(
       `SELECT id FROM courses
        WHERE teacher_id = $1
-       ORDER BY created_at DESC, id DESC`,
+       ORDER BY updated_at DESC, id DESC`,
       [teacher.teacherId],
     );
     const emptyPage = await repository.listTeacherCourses(
@@ -318,6 +369,196 @@ describe("course repository", () => {
     expect(repeatedFirstPage.items.map(({ id }) => id)).toEqual(
       firstPage.items.map(({ id }) => id),
     );
+  });
+
+  it("searches case-insensitively within the teacher's courses before pagination", async () => {
+    const owner = await createTeacherFixture();
+    const anotherTeacher = await createTeacherFixture();
+    const older = await createTestCourse(owner, "Cameroon Algebra Basics");
+    const newer = await createTestCourse(owner, "CAMEROON Algebra Advanced");
+    const otherTeacherCourse = await createTestCourse(
+      anotherTeacher,
+      "Cameroon Algebra Foreign",
+    );
+    const unrelated = await createTestCourse(owner, "Physics Mechanics");
+
+    await pool.query(
+      "UPDATE courses SET updated_at = $2::timestamptz WHERE id = $1",
+      [older.id, "2026-11-10T10:00:00.000Z"],
+    );
+    await pool.query(
+      "UPDATE courses SET updated_at = $2::timestamptz WHERE id = $1",
+      [newer.id, "2026-11-12T10:00:00.000Z"],
+    );
+    await pool.query(
+      "UPDATE courses SET updated_at = $2::timestamptz WHERE id = $1",
+      [otherTeacherCourse.id, "2026-11-13T10:00:00.000Z"],
+    );
+    await pool.query("UPDATE courses SET status = 'published' WHERE id = $1", [
+      older.id,
+    ]);
+
+    const firstPage = await repository.listTeacherCourses(owner.teacherId, {
+      search: "cameroon algebra",
+      status: "draft",
+      sort: "updated_desc",
+      page: 1,
+      pageSize: 1,
+    });
+    const secondPage = await repository.listTeacherCourses(owner.teacherId, {
+      search: "CAMEROON",
+      sort: "updated_desc",
+      page: 2,
+      pageSize: 1,
+    });
+
+    expect(firstPage.pagination).toEqual({
+      page: 1,
+      pageSize: 1,
+      totalItems: 1,
+      totalPages: 1,
+    });
+    expect(firstPage.items.map(({ id }) => id)).toEqual([newer.id]);
+    expect(secondPage.items.map(({ id }) => id)).toEqual([older.id]);
+    expect(
+      [...firstPage.items, ...secondPage.items].map(({ id }) => id),
+    ).not.toContain(otherTeacherCourse.id);
+    expect(
+      [...firstPage.items, ...secondPage.items].map(({ id }) => id),
+    ).not.toContain(unrelated.id);
+  });
+
+  it("supports deterministic title sorting", async () => {
+    const owner = await createTeacherFixture();
+    const zulu = await createTestCourse(owner, "Zulu course");
+    const alphaOne = await createTestCourse(owner, "Alpha course");
+    const alphaTwo = await createTestCourse(owner, "Alpha course");
+    const expectedAlphaIds = await pool.query<{ id: string }>(
+      `SELECT id FROM courses
+       WHERE id = ANY($1::uuid[])
+       ORDER BY title ASC, id ASC`,
+      [[alphaOne.id, alphaTwo.id, zulu.id]],
+    );
+
+    const result = await repository.listTeacherCourses(owner.teacherId, {
+      sort: "title_asc",
+      page: 1,
+      pageSize: 20,
+    });
+
+    expect(result.items.map(({ id }) => id)).toEqual(
+      expectedAlphaIds.rows.map(({ id }) => id),
+    );
+  });
+
+  it("counts supported statuses only for the requested teacher", async () => {
+    const owner = await createTeacherFixture();
+    const anotherTeacher = await createTeacherFixture();
+
+    const draft = await createTestCourse(owner, "Owner draft");
+    const pending = await createTestCourse(owner, "Owner in review");
+    const published = await createTestCourse(owner, "Owner published");
+    const rejected = await createTestCourse(owner, "Owner rejected");
+    const otherCourse = await createTestCourse(
+      anotherTeacher,
+      "Other teacher course",
+    );
+
+    await pool.query(
+      "UPDATE courses SET status = 'pending_review' WHERE id = $1",
+      [pending.id],
+    );
+    await pool.query("UPDATE courses SET status = 'published' WHERE id = $1", [
+      published.id,
+    ]);
+    await pool.query("UPDATE courses SET status = 'rejected' WHERE id = $1", [
+      rejected.id,
+    ]);
+
+    const summary = await repository.getTeacherDashboardSummary(
+      owner.teacherId,
+    );
+
+    expect(summary.statusCounts).toEqual({
+      total: 4,
+      draft: 1,
+      pendingReview: 1,
+      published: 1,
+      rejected: 1,
+    });
+    expect(summary.recentDraftCourses).toEqual([
+      expect.objectContaining({
+        id: draft.id,
+        title: "Owner draft",
+        status: "draft",
+      }),
+    ]);
+    expect(summary.recentDraftCourses.map(({ id }) => id)).not.toContain(
+      otherCourse.id,
+    );
+  });
+
+  it("returns the three most recently updated drafts with a deterministic ID tie-breaker", async () => {
+    const owner = await createTeacherFixture();
+    const tiedFirst = await createTestCourse(owner, "Tied draft one");
+    const tiedSecond = await createTestCourse(owner, "Tied draft two");
+    const next = await createTestCourse(owner, "Next draft");
+    const oldest = await createTestCourse(owner, "Oldest draft");
+
+    const tiedTimestamp = "2026-11-16T10:00:00.000Z";
+    const nextTimestamp = "2026-11-15T10:00:00.000Z";
+    const oldestTimestamp = "2026-11-14T10:00:00.000Z";
+
+    for (const course of [tiedFirst, tiedSecond]) {
+      await pool.query(
+        "UPDATE courses SET updated_at = $2::timestamptz WHERE id = $1",
+        [course.id, tiedTimestamp],
+      );
+    }
+    await pool.query(
+      "UPDATE courses SET updated_at = $2::timestamptz WHERE id = $1",
+      [next.id, nextTimestamp],
+    );
+    await pool.query(
+      "UPDATE courses SET updated_at = $2::timestamptz WHERE id = $1",
+      [oldest.id, oldestTimestamp],
+    );
+
+    const expectedTieOrder = await pool.query<{ id: string }>(
+      `SELECT id FROM courses
+       WHERE id = ANY($1::uuid[])
+       ORDER BY id DESC`,
+      [[tiedFirst.id, tiedSecond.id]],
+    );
+    const summary = await repository.getTeacherDashboardSummary(
+      owner.teacherId,
+    );
+
+    expect(summary.recentDraftCourses).toHaveLength(3);
+    expect(summary.recentDraftCourses.map(({ id }) => id)).toEqual([
+      ...expectedTieOrder.rows.map(({ id }) => id),
+      next.id,
+    ]);
+    expect(
+      summary.recentDraftCourses.map(({ updatedAt }) => updatedAt),
+    ).toEqual([tiedTimestamp, tiedTimestamp, nextTimestamp]);
+  });
+
+  it("returns zero counts and no recent drafts for an empty teacher", async () => {
+    const emptyTeacher = await createTeacherFixture();
+
+    await expect(
+      repository.getTeacherDashboardSummary(emptyTeacher.teacherId),
+    ).resolves.toEqual({
+      statusCounts: {
+        total: 0,
+        draft: 0,
+        pendingReview: 0,
+        published: 0,
+        rejected: 0,
+      },
+      recentDraftCourses: [],
+    });
   });
 
   it("returns a course only to its owner and hides other teachers' courses", async () => {

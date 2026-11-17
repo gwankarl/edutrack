@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { currentUserQueryKey } from "./useCurrentUser.js";
 import { useLogin } from "./useLogin.js";
+import { teacherDashboardSummaryQueryKeys } from "../../teachers/hooks/teacher-dashboard-query-keys.js";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -32,6 +33,9 @@ describe("useLogin", () => {
       },
     });
     queryClient.setQueryData(currentUserQueryKey, { id: "cached-user" });
+    const dashboardKey =
+      teacherDashboardSummaryQueryKeys.forUser("cached-user");
+    queryClient.setQueryData(dashboardKey, { cached: "dashboard-summary" });
     queryClient.setQueryData(
       ["admin", "teacher-applications", "cached-user", "list", {}],
       { items: ["cached-administrator-data"] },
@@ -90,6 +94,7 @@ describe("useLogin", () => {
         {},
       ]),
     ).toBeUndefined();
+    expect(queryClient.getQueryData(dashboardKey)).toBeUndefined();
     expect(queryClient.getQueryState(currentUserQueryKey)?.isInvalidated).toBe(
       true,
     );

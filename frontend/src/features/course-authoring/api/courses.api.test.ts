@@ -5,6 +5,8 @@ import {
   createTeacherCourse,
   getTeacherCourse,
   listTeacherCourses,
+  removeTeacherCourseThumbnail,
+  uploadTeacherCourseThumbnail,
   updateTeacherCourse,
 } from "./courses.api.js";
 
@@ -127,6 +129,37 @@ describe("listTeacherCourses", () => {
     );
   });
 
+  it("encodes trimmed search and a requested server sort in the URL", async () => {
+    const response = {
+      items: [course],
+      pagination: {
+        page: 2,
+        pageSize: 25,
+        totalItems: 1,
+        totalPages: 1,
+      },
+    };
+    const fetchMock = stubJsonResponse(response);
+
+    await expect(
+      listTeacherCourses({
+        search: "  Algebra & Geometry  ",
+        status: "draft",
+        sort: "title_asc",
+        page: 2,
+        pageSize: 25,
+      }),
+    ).resolves.toEqual(response);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/teacher/courses?page=2&pageSize=25&status=draft&search=Algebra+%26+Geometry&sort=title_asc",
+      expect.objectContaining({
+        method: "GET",
+        credentials: "same-origin",
+      }),
+    );
+  });
+
   it("uses contract defaults and rejects invalid filters before fetching", async () => {
     const fetchMock = stubJsonResponse({
       items: [],
@@ -144,6 +177,12 @@ describe("listTeacherCourses", () => {
     await expect(listTeacherCourses({ page: 0 })).rejects.toBeInstanceOf(
       ZodError,
     );
+    await expect(listTeacherCourses({ search: "   " })).rejects.toBeInstanceOf(
+      ZodError,
+    );
+    await expect(
+      listTeacherCourses({ sort: "unknown" as never }),
+    ).rejects.toBeInstanceOf(ZodError);
     expect(invalidFetch).not.toHaveBeenCalled();
   });
 });
@@ -202,6 +241,60 @@ describe("updateTeacherCourse", () => {
     await expect(
       updateTeacherCourse(courseId, { teacherId: courseId } as never),
     ).rejects.toBeInstanceOf(ZodError);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("course thumbnails", () => {
+  it("uploads multipart file data to the authenticated course endpoint", async () => {
+    const thumbnail = {
+      url: "https://images.example.test/course.webp",
+      width: 1600,
+      height: 900,
+      format: "webp",
+    };
+    const fetchMock = stubJsonResponse({ thumbnail });
+    const file = new File([new Uint8Array([1, 2, 3])], "cover.webp", {
+      type: "image/webp",
+    });
+
+    await expect(uploadTeacherCourseThumbnail(courseId, file)).resolves.toEqual(
+      thumbnail,
+    );
+
+    const [path, request] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(path).toBe(`/api/v1/teacher/courses/${courseId}/thumbnail`);
+    expect(request.method).toBe("POST");
+    expect(request.credentials).toBe("same-origin");
+    expect(request.body).toBeInstanceOf(FormData);
+    expect((request.body as FormData).get("file")).toBe(file);
+  });
+
+  it("removes a thumbnail with the backend's 204 response", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(removeTeacherCourseThumbnail(courseId)).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/v1/teacher/courses/${courseId}/thumbnail`,
+      expect.objectContaining({
+        method: "DELETE",
+        credentials: "same-origin",
+      }),
+    );
+  });
+
+  it("rejects invalid course IDs before making thumbnail requests", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const file = new File(["image"], "cover.webp", { type: "image/webp" });
+
+    await expect(
+      uploadTeacherCourseThumbnail("not-a-uuid", file),
+    ).rejects.toBeInstanceOf(ZodError);
+    await expect(removeTeacherCourseThumbnail("not-a-uuid")).rejects.toBeInstanceOf(
+      ZodError,
+    );
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

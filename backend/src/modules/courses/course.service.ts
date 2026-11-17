@@ -7,6 +7,8 @@ import {
   teacherCourseListResponseSchema,
   teacherCourseResponseSchema,
   updateTeacherCourseRequestSchema,
+  teacherDashboardSummaryResponseSchema,
+  type TeacherDashboardSummaryResponse,
   type AcademicLevelResponse,
   type SubjectResponse,
   type TeacherCourseListResponse,
@@ -26,6 +28,9 @@ export interface CourseRepository {
     teacherId: string,
     filters: TeacherCourseListFilters,
   ): Promise<TeacherCourseListResponse>;
+  getTeacherDashboardSummary(
+    teacherId: string,
+  ): Promise<TeacherDashboardSummaryResponse>;
   getTeacherCourseById(
     courseId: string,
     teacherId: string,
@@ -180,6 +185,16 @@ export function createCourseService({
       );
 
       return teacherCourseListResponseSchema.parse(result);
+    },
+
+    async getMyDashboardSummary(
+      userId: string,
+    ): Promise<TeacherDashboardSummaryResponse> {
+      const teacherId = await resolveTeacherProfile(userId);
+      const summary =
+        await courseRepository.getTeacherDashboardSummary(teacherId);
+
+      return teacherDashboardSummaryResponseSchema.parse(summary);
     },
 
     async getMyCourse(

@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { CreateTeacherCourseRequest } from "@edutrack/contracts";
 
 import { useCurrentUser } from "../../auth/hooks/useCurrentUser.js";
+import { teacherDashboardSummaryQueryKeys } from "../../teachers/hooks/teacher-dashboard-query-keys.js";
 import { createTeacherCourse } from "../api/courses.api.js";
 import {
   getTeacherAccessStatus,
@@ -31,9 +32,14 @@ export function useCreateCourse() {
         teacherCourseQueryKeys.detail(userId, course.id),
         course,
       );
-      await queryClient.invalidateQueries({
-        queryKey: teacherCourseQueryKeys.lists(userId),
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: teacherCourseQueryKeys.lists(userId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: teacherDashboardSummaryQueryKeys.forUser(userId),
+        }),
+      ]);
     },
   });
 }

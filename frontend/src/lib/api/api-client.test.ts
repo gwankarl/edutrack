@@ -127,4 +127,29 @@ describe("apiRequest", () => {
       }),
     );
   });
+
+  it("passes FormData through without setting Content-Type", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ uploaded: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const body = new FormData();
+    body.append("file", new File(["image"], "cover.png", { type: "image/png" }));
+
+    await expect(
+      apiRequest<{ uploaded: boolean }>("/api/v1/example/upload", {
+        method: "POST",
+        body,
+      }),
+    ).resolves.toEqual({ uploaded: true });
+
+    const [, request] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const headers = new Headers(request.headers);
+    expect(request.body).toBe(body);
+    expect(request.credentials).toBe("same-origin");
+    expect(headers.has("Content-Type")).toBe(false);
+  });
 });

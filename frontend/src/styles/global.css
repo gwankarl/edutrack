@@ -75,3 +75,40 @@
     outline-offset: 2px;
   }
 }
+
+@layer components {
+  .ProseMirror:focus {
+    outline: none;
+  }
+
+  .ProseMirror > :first-child {
+    margin-top: 0;
+  }
+
+  .ProseMirror [data-type="inline-math"] {
+    padding-inline: 0.125rem;
+  }
+
+  .ProseMirror [data-type="block-math"] {
+    overflow-x: auto;
+    padding-block: 0.75rem;
+  }
+
+  .ProseMirror table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .ProseMirror img {
+    height: auto;
+    max-width: 100%;
+  }
+
+  math-field {
+    display: block;
+    --hue: 220;
+    --primary: var(--color-primary);
+    --selection-background-color: var(--color-info-surface);
+  }
+}

@@ -16,7 +16,7 @@ export default function AppLayout() {
       <Header />
 
       <main
-        className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 sm:py-10 lg:px-8"
+        className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 sm:py-5 lg:px-8"
         id="main-content"
         tabIndex={-1}
       >

@@ -9,6 +9,14 @@ export const COURSE_DESCRIPTION_MAX_LENGTH = 5_000;
 export const TEACHER_COURSE_DEFAULT_PAGE = 1;
 export const TEACHER_COURSE_DEFAULT_PAGE_SIZE = 20;
 export const TEACHER_COURSE_MAX_PAGE_SIZE = 100;
+export const COURSE_SEARCH_MAX_LENGTH = COURSE_TITLE_MAX_LENGTH;
+
+export const teacherCourseSortSchema = z.enum([
+  "updated_desc",
+  "created_desc",
+  "title_asc",
+  "title_desc",
+]);
 
 export const courseStatusSchema = z.enum([
   "draft",
@@ -16,6 +24,15 @@ export const courseStatusSchema = z.enum([
   "published",
   "rejected",
 ]);
+
+export const courseThumbnailResponseSchema = z
+  .object({
+    url: z.url().refine((value) => value.startsWith("https://")),
+    width: z.number().int().positive(),
+    height: z.number().int().positive(),
+    format: z.enum(["jpg", "png", "webp"]),
+  })
+  .strict();
 
 export const createTeacherCourseRequestSchema = z
   .object({
@@ -64,6 +81,8 @@ export const teacherCourseParamsSchema = z
 export const teacherCourseListQuerySchema = z
   .object({
     status: courseStatusSchema.optional(),
+    search: z.string().trim().min(1).max(COURSE_SEARCH_MAX_LENGTH).optional(),
+    sort: teacherCourseSortSchema.default("updated_desc"),
     page: z.coerce.number().int().min(1).default(TEACHER_COURSE_DEFAULT_PAGE),
     pageSize: z.coerce
       .number()
@@ -87,6 +106,7 @@ export const teacherCourseResponseSchema = z
     academicLevel: academicLevelResponseSchema,
     subject: subjectResponseSchema,
     status: courseStatusSchema,
+    thumbnail: courseThumbnailResponseSchema.nullable().optional(),
     createdAt: z.iso.datetime({ offset: true }),
     updatedAt: z.iso.datetime({ offset: true }),
   })
@@ -106,7 +126,40 @@ export const teacherCourseListResponseSchema = z
   })
   .strict();
 
+export const teacherDashboardSummaryResponseSchema = z
+  .object({
+    statusCounts: z
+      .object({
+        total: z.number().int().nonnegative(),
+        draft: z.number().int().nonnegative(),
+        pendingReview: z.number().int().nonnegative(),
+        published: z.number().int().nonnegative(),
+        rejected: z.number().int().nonnegative(),
+      })
+      .strict(),
+    recentDraftCourses: z
+      .array(
+        z
+          .object({
+            id: z.uuid(),
+            title: z.string().trim().min(1).max(COURSE_TITLE_MAX_LENGTH),
+            status: z.literal("draft"),
+            updatedAt: z.iso.datetime({ offset: true }),
+          })
+          .strict(),
+      )
+      .max(3),
+  })
+  .strict();
+
+export type TeacherDashboardSummaryResponse = z.infer<
+  typeof teacherDashboardSummaryResponseSchema
+>;
+
 export type CourseStatus = z.infer<typeof courseStatusSchema>;
+export type CourseThumbnailResponse = z.infer<
+  typeof courseThumbnailResponseSchema
+>;
 export type CreateTeacherCourseRequest = z.infer<
   typeof createTeacherCourseRequestSchema
 >;
@@ -121,3 +174,5 @@ export type TeacherCourseResponse = z.infer<typeof teacherCourseResponseSchema>;
 export type TeacherCourseListResponse = z.infer<
   typeof teacherCourseListResponseSchema
 >;
+
+export type TeacherCourseSort = z.infer<typeof teacherCourseSortSchema>;

@@ -2,14 +2,17 @@ import { describe, expect, it } from "vitest";
 
 import {
   COURSE_DESCRIPTION_MAX_LENGTH,
+  COURSE_SEARCH_MAX_LENGTH,
   COURSE_TITLE_MAX_LENGTH,
   TEACHER_COURSE_DEFAULT_PAGE,
   TEACHER_COURSE_DEFAULT_PAGE_SIZE,
   createTeacherCourseRequestSchema,
   teacherCourseListQuerySchema,
   teacherCourseListResponseSchema,
+  courseThumbnailResponseSchema,
   teacherCourseParamsSchema,
   teacherCourseResponseSchema,
+  teacherDashboardSummaryResponseSchema,
   updateTeacherCourseRequestSchema,
 } from "./courses.js";
 
@@ -179,6 +182,7 @@ describe("teacherCourseParamsSchema", () => {
 describe("teacherCourseListQuerySchema", () => {
   it("applies pagination defaults and supports status filtering", () => {
     expect(teacherCourseListQuerySchema.parse({})).toEqual({
+      sort: "updated_desc",
       page: TEACHER_COURSE_DEFAULT_PAGE,
       pageSize: TEACHER_COURSE_DEFAULT_PAGE_SIZE,
     });
@@ -189,7 +193,12 @@ describe("teacherCourseListQuerySchema", () => {
         page: "2",
         pageSize: "50",
       }),
-    ).toEqual({ status: "draft", page: 2, pageSize: 50 });
+    ).toEqual({
+      status: "draft",
+      sort: "updated_desc",
+      page: 2,
+      pageSize: 50,
+    });
   });
 
   it("rejects invalid status, pagination bounds, and unexpected query fields", () => {
@@ -200,6 +209,34 @@ describe("teacherCourseListQuerySchema", () => {
       { pageSize: "0" },
       { pageSize: "101" },
       { teacherId: "550e8400-e29b-41d4-a716-446655440099" },
+    ]) {
+      expect(teacherCourseListQuerySchema.safeParse(query).success).toBe(false);
+    }
+  });
+
+  it("trims search and accepts supported sorting", () => {
+    expect(
+      teacherCourseListQuerySchema.parse({
+        search: "  Algebra  ",
+        status: "pending_review",
+        sort: "title_asc",
+        page: "2",
+        pageSize: "50",
+      }),
+    ).toEqual({
+      search: "Algebra",
+      status: "pending_review",
+      sort: "title_asc",
+      page: 2,
+      pageSize: 50,
+    });
+  });
+
+  it("rejects blank or excessive searches and unsupported sorting", () => {
+    for (const query of [
+      { search: "   " },
+      { search: "A".repeat(COURSE_SEARCH_MAX_LENGTH + 1) },
+      { sort: "random" },
     ]) {
       expect(teacherCourseListQuerySchema.safeParse(query).success).toBe(false);
     }
@@ -262,5 +299,111 @@ describe("teacherCourseListResponseSchema", () => {
         },
       }).items,
     ).toEqual([]);
+  });
+});
+
+describe("teacherDashboardSummaryResponseSchema", () => {
+  const summary = {
+    statusCounts: {
+      total: 5,
+      draft: 2,
+      pendingReview: 1,
+      published: 1,
+      rejected: 1,
+    },
+    recentDraftCourses: [
+      {
+        id: courseId,
+        title: "Algebra",
+        status: "draft",
+        updatedAt: "2026-11-16T10:00:00.000Z",
+      },
+    ],
+  } as const;
+
+  it("accepts all supported status counts and up to three recent drafts", () => {
+    expect(teacherDashboardSummaryResponseSchema.parse(summary)).toEqual(
+      summary,
+    );
+    expect(
+      teacherDashboardSummaryResponseSchema.parse({
+        statusCounts: {
+          total: 0,
+          draft: 0,
+          pendingReview: 0,
+          published: 0,
+          rejected: 0,
+        },
+        recentDraftCourses: [],
+      }).recentDraftCourses,
+    ).toEqual([]);
+  });
+
+  it("rejects inconsistent shapes, non-draft recent courses, and more than three drafts", () => {
+    expect(
+      teacherDashboardSummaryResponseSchema.safeParse({
+        ...summary,
+        recentDraftCourses: [
+          { ...summary.recentDraftCourses[0], status: "published" },
+        ],
+      }).success,
+    ).toBe(false);
+
+    expect(
+      teacherDashboardSummaryResponseSchema.safeParse({
+        ...summary,
+        recentDraftCourses: Array.from({ length: 4 }, (_, index) => ({
+          ...summary.recentDraftCourses[0],
+          id: `550e8400-e29b-41d4-a716-4466554400${String(index).padStart(2, "0")}`,
+        })),
+      }).success,
+    ).toBe(false);
+
+    expect(
+      teacherDashboardSummaryResponseSchema.safeParse({
+        ...summary,
+        statusCounts: { ...summary.statusCounts, draft: -1 },
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("courseThumbnailResponseSchema", () => {
+  it("accepts safe Cloudinary delivery metadata", () => {
+    expect(
+      courseThumbnailResponseSchema.parse({
+        url: "https://res.cloudinary.com/demo/image/upload/course.webp",
+        width: 1280,
+        height: 720,
+        format: "webp",
+      }),
+    ).toMatchObject({ format: "webp" });
+  });
+
+  it("rejects non-HTTPS URLs, unsupported formats, and invalid dimensions", () => {
+    for (const thumbnail of [
+      {
+        url: "http://example.test/course.png",
+        width: 1,
+        height: 1,
+        format: "png",
+      },
+      {
+        url: "https://example.test/course.gif",
+        width: 1,
+        height: 1,
+        format: "gif",
+      },
+      {
+        url: "https://example.test/course.jpg",
+        width: 0,
+        height: 1,
+        format: "jpg",
+      },
+    ]) {
+      expect(courseThumbnailResponseSchema.safeParse(thumbnail).success).toBe(
+        false,
+      );
+    }
   });
 });

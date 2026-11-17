@@ -1,5 +1,5 @@
+import { useId } from "react";
 import type { ChangeEvent } from "react";
-
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeftRight,
@@ -18,6 +18,10 @@ import {
   workspaceConfig,
   type Workspace,
 } from "../../lib/workspace/workspace-config.js";
+
+interface WorkspaceSwitcherProps {
+  onWorkspaceChange?: () => void;
+}
 
 const teacherApplicationRoutes = [
   "/teacher/apply",
@@ -44,12 +48,17 @@ function workspaceForPath(
   });
 }
 
-export default function WorkspaceSwitcher() {
+export default function WorkspaceSwitcher({
+  onWorkspaceChange,
+}: WorkspaceSwitcherProps = {}) {
+  const workspaceSelectId = useId();
   const currentUser = useCurrentUser();
   const queryClient = useQueryClient();
   const location = useLocation();
   const navigate = useNavigate();
 
+  // Retain the last confirmed workspace during background session refreshes.
+  // The current-user hook reports loading only before the first response.
   if (currentUser.status === "loading") {
     return (
       <p
@@ -152,13 +161,14 @@ export default function WorkspaceSwitcher() {
     }
 
     navigate(workspaceConfig[workspaceId].landingRoute);
+    onWorkspaceChange?.();
   }
 
   return (
     <div className="flex min-h-11 flex-wrap items-center gap-2">
       <label
         className="text-sm font-medium text-foreground"
-        htmlFor="workspace-switcher"
+        htmlFor={workspaceSelectId}
       >
         Workspace
       </label>
@@ -170,7 +180,7 @@ export default function WorkspaceSwitcher() {
         <select
           aria-label="Workspace"
           className="min-h-11 min-w-48 rounded-md border border-border bg-background py-2 pl-9 pr-3 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-          id="workspace-switcher"
+          id={workspaceSelectId}
           onChange={handleWorkspaceChange}
           value={selectedWorkspace.id}
         >

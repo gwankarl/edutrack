@@ -7,9 +7,11 @@ import { teacherCourseParamsSchema } from "@edutrack/contracts";
 
 import { ApiError } from "../../../lib/api/api-error.js";
 import { currentUserQueryKey } from "../../auth/hooks/auth-query-keys.js";
-import CourseDetails from "../components/CourseDetails.js";
-import CourseForm from "../components/CourseForm.js";
+import CourseOverview from "../components/CourseOverview.js";
 import { useTeacherCourse } from "../hooks/useTeacherCourse.js";
+import CourseWorkspaceTabs from "../components/CourseWorkspaceTabs.js";
+import CoursePublicationTab from "../components/CoursePublicationTab.js";
+import CourseContentTree from "../components/CourseContentTree.js";
 
 function Notice({
   title,
@@ -56,6 +58,13 @@ export default function TeacherCourseDetailsPage() {
   function retrySession() {
     void queryClient.invalidateQueries({ queryKey: currentUserQueryKey });
   }
+
+  const visibleCourse =
+    params.success &&
+    courseQuery.authorizationStatus === "authorized" &&
+    !courseQuery.isError
+      ? courseQuery.data
+      : undefined;
 
   let content: ReactNode;
 
@@ -167,59 +176,70 @@ export default function TeacherCourseDetailsPage() {
     const course = courseQuery.data;
 
     content = (
-      <div className="space-y-6">
-        <CourseDetails course={course} />
-        {course.status === "draft" ? (
-          <section
-            aria-labelledby="edit-course-heading"
-            className="space-y-5 rounded-lg border border-border bg-surface p-5 sm:p-7"
-          >
-            <div className="space-y-2">
-              <h2
-                className="text-xl font-semibold text-foreground"
-                id="edit-course-heading"
-              >
-                Edit draft course
-              </h2>
-              <p className="text-sm leading-6 text-muted-foreground">
-                Changes are saved to this draft. Other course statuses are
-                read-only here.
-              </p>
-            </div>
-            <CourseForm
-              initialCourse={course}
-              onUpdated={() => void courseQuery.refetch()}
-            />
-          </section>
-        ) : (
-          <Notice title="This course is read-only">
-            <p>
-              Only Draft courses can be edited. This course is currently{" "}
-              {course.status.replace("_", " ")}.
-            </p>
-          </Notice>
-        )}
-      </div>
+      <CourseWorkspaceTabs
+        courseContent={
+          <CourseContentTree
+            canManage={course.status === "draft"}
+            courseId={course.id}
+          />
+        }
+        overview={
+          <CourseOverview
+            course={course}
+            onUpdated={() => void courseQuery.refetch()}
+          />
+        }
+        publication={<CoursePublicationTab course={course} />}
+      />
     );
   }
 
   return (
     <main className="mx-auto w-full max-w-5xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
-      <nav aria-label="Course navigation">
-        <Link
-          className="inline-flex min-h-11 items-center gap-2 rounded-md font-semibold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-          to="/teacher/courses"
-        >
-          <ArrowLeft aria-hidden="true" className="size-4" />
-          Back to courses
-        </Link>
+      <nav aria-label="Breadcrumb">
+        <ol className="flex flex-wrap items-center gap-2 text-sm">
+          <li>
+            <Link
+              className="inline-flex min-h-11 items-center gap-2 font-semibold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+              to="/teacher/courses"
+            >
+              <ArrowLeft aria-hidden="true" className="size-4" />
+              Back to My Courses
+            </Link>
+          </li>
+          {visibleCourse && (
+            <>
+              <li aria-hidden="true" className="text-muted-foreground">
+                /
+              </li>
+              <li
+                aria-current="page"
+                className="max-w-full truncate text-muted-foreground"
+              >
+                {visibleCourse.title}
+              </li>
+            </>
+          )}
+        </ol>
       </nav>
+
       <header className="space-y-2">
         <p className="text-sm font-semibold text-primary">Teacher workspace</p>
-        <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-          Course details
+        <h1 className="wrap-break-word text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+          {visibleCourse?.title ?? "Course details"}
         </h1>
+        {visibleCourse && (
+          <p
+            aria-label={`Course status: ${visibleCourse.status.replace("_", " ").replace(/\b\w/g, (character) => character.toUpperCase())}`}
+            className="inline-flex rounded-full bg-info-surface px-3 py-1 text-sm font-semibold text-info"
+          >
+            {visibleCourse.status
+              .replace("_", " ")
+              .replace(/\b\w/g, (character) => character.toUpperCase())}
+          </p>
+        )}
       </header>
+
       {content}
     </main>
   );

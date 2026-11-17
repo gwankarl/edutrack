@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -82,14 +82,14 @@ const rejectedApplication = {
   rejectionReason: "Please provide more relevant experience.",
 };
 
-function renderHeader() {
+function renderHeader(initialPath = "/") {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={["/"]}>
+      <MemoryRouter initialEntries={[initialPath]}>
         <Header />
         <CurrentPath />
       </MemoryRouter>
@@ -144,6 +144,27 @@ describe("Header", () => {
     expect(screen.getByLabelText("Current path")).toHaveTextContent(
       "/register",
     );
+  });
+
+  it("shows the mobile Teacher menu on Teacher routes and opens the drawer", async () => {
+    stubTeacherNavigation(["student", "teacher"], null);
+
+    const user = userEvent.setup();
+    renderHeader("/teacher/courses/course-id");
+
+    const menuButton = await screen.findByRole("button", {
+      name: "Open Teacher navigation",
+    });
+    expect(menuButton).toHaveClass("lg:hidden");
+
+    await user.click(menuButton);
+
+    expect(
+      await screen.findByRole("dialog", { name: "Teacher navigation" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Close Teacher navigation" }),
+    ).toBeVisible();
   });
 
   it("keeps the EduTrack brand linked to Home", () => {
@@ -220,9 +241,18 @@ describe("Header", () => {
     await user.selectOptions(switcher, "teacher");
 
     expect(screen.getByLabelText("Current path")).toHaveTextContent("/teacher");
-    expect(screen.getByRole("combobox", { name: "Workspace" })).toHaveValue(
-      "teacher",
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Open Teacher navigation",
+      }),
     );
+    const drawer = await screen.findByRole("dialog", {
+      name: "Teacher navigation",
+    });
+    expect(
+      within(drawer).getByRole("combobox", { name: "Workspace" }),
+    ).toHaveValue("teacher");
   });
 
   it("switches Administrators to the existing review route", async () => {
@@ -267,6 +297,19 @@ describe("Header", () => {
     expect(
       screen.getByRole("link", { name: "Become a Teacher" }),
     ).toHaveAttribute("href", "/teacher/apply");
+  });
+
+  it("keeps global branding and account controls without duplicating the Teacher sidebar switcher", async () => {
+    stubTeacherNavigation(["student", "teacher"], null);
+    renderHeader("/teacher/courses/course-id/topics");
+
+    expect(
+      await screen.findByRole("link", { name: "EduTrack home" }),
+    ).toHaveAttribute("href", "/");
+    expect(
+      await screen.findByRole("button", { name: "Ada Student account menu" }),
+    ).toBeVisible();
+    expect(screen.queryByRole("combobox", { name: "Workspace" })).toBeNull();
   });
 
   it("hides teacher application links from users who already have the Teacher role", async () => {

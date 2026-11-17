@@ -1,4 +1,4 @@
-import { and, count, desc, eq } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike } from "drizzle-orm";
 
 import type {
   CreateTeacherCourseRequest,
@@ -6,6 +6,8 @@ import type {
   TeacherCourseListResponse,
   TeacherCourseResponse,
   UpdateTeacherCourseRequest,
+  CourseStatus,
+  TeacherDashboardSummaryResponse,
 } from "@edutrack/contracts";
 import type { Database } from "../../infrastructure/database/client.js";
 import { academicLevels } from "../../infrastructure/database/schema/academic-levels.js";
@@ -28,8 +30,10 @@ export type CreateCourseData = CreateTeacherCourseRequest & {
 
 export type TeacherCourseListFilters = Pick<
   TeacherCourseListQuery,
-  "status" | "page" | "pageSize"
->;
+  "status" | "search" | "page" | "pageSize"
+> & {
+  sort?: TeacherCourseListQuery["sort"];
+};
 
 export type UpdateTeacherCourseResult =
   | { kind: "updated"; course: TeacherCourseResponse }
@@ -56,6 +60,12 @@ function selectCourseWithCatalog(database: DatabaseExecutor) {
         sortOrder: subjects.sortOrder,
       },
       status: courses.status,
+      thumbnailPublicId: courses.thumbnailPublicId,
+      thumbnailAssetId: courses.thumbnailAssetId,
+      thumbnailSecureUrl: courses.thumbnailSecureUrl,
+      thumbnailWidth: courses.thumbnailWidth,
+      thumbnailHeight: courses.thumbnailHeight,
+      thumbnailFormat: courses.thumbnailFormat,
       createdAt: courses.createdAt,
       updatedAt: courses.updatedAt,
     })
@@ -68,21 +78,59 @@ type JoinedCourse = Awaited<ReturnType<typeof selectCourseWithCatalog>>[number];
 
 function toTeacherCourseResponse(row: JoinedCourse): TeacherCourseResponse {
   return {
-    ...row,
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    academicLevel: row.academicLevel,
+    subject: row.subject,
+    status: row.status,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    thumbnail:
+      row.thumbnailSecureUrl &&
+      row.thumbnailWidth &&
+      row.thumbnailHeight &&
+      row.thumbnailFormat
+        ? {
+            url: row.thumbnailSecureUrl,
+            width: row.thumbnailWidth,
+            height: row.thumbnailHeight,
+            format: row.thumbnailFormat as "jpg" | "png" | "webp",
+          }
+        : null,
   };
 }
 
 function teacherCourseWhere(
   teacherId: string,
-  status: TeacherCourseListFilters["status"],
+  filters: Pick<TeacherCourseListFilters, "status" | "search">,
 ) {
-  if (status) {
-    return and(eq(courses.teacherId, teacherId), eq(courses.status, status));
+  const conditions = [eq(courses.teacherId, teacherId)];
+
+  if (filters.status) {
+    conditions.push(eq(courses.status, filters.status));
   }
 
-  return eq(courses.teacherId, teacherId);
+  if (filters.search) {
+    const escapedSearch = filters.search.replace(/[\\%_]/g, "\\$&");
+    conditions.push(ilike(courses.title, `%${escapedSearch}%`));
+  }
+
+  return and(...conditions);
+}
+
+function teacherCourseOrder(sort: TeacherCourseListQuery["sort"]) {
+  switch (sort) {
+    case "created_desc":
+      return [desc(courses.createdAt), desc(courses.id)] as const;
+    case "title_asc":
+      return [asc(courses.title), asc(courses.id)] as const;
+    case "title_desc":
+      return [desc(courses.title), desc(courses.id)] as const;
+    case "updated_desc":
+    default:
+      return [desc(courses.updatedAt), desc(courses.id)] as const;
+  }
 }
 
 /**
@@ -128,7 +176,8 @@ export function createCourseRepository(database: DatabaseExecutor) {
       teacherId: string,
       filters: TeacherCourseListFilters,
     ): Promise<TeacherCourseListResponse> {
-      const where = teacherCourseWhere(teacherId, filters.status);
+      const where = teacherCourseWhere(teacherId, filters);
+      const order = teacherCourseOrder(filters.sort ?? "updated_desc");
 
       const [countResult] = await database
         .select({ totalItems: count() })
@@ -137,7 +186,7 @@ export function createCourseRepository(database: DatabaseExecutor) {
 
       const rows = await selectCourseWithCatalog(database)
         .where(where)
-        .orderBy(desc(courses.createdAt), desc(courses.id))
+        .orderBy(...order)
         .limit(filters.pageSize)
         .offset((filters.page - 1) * filters.pageSize);
 
@@ -151,6 +200,62 @@ export function createCourseRepository(database: DatabaseExecutor) {
           totalItems,
           totalPages: Math.ceil(totalItems / filters.pageSize),
         },
+      };
+    },
+
+    async getTeacherDashboardSummary(
+      teacherId: string,
+    ): Promise<TeacherDashboardSummaryResponse> {
+      const [statusRows, recentDraftRows] = await Promise.all([
+        database
+          .select({
+            status: courses.status,
+            courseCount: count(),
+          })
+          .from(courses)
+          .where(eq(courses.teacherId, teacherId))
+          .groupBy(courses.status),
+        database
+          .select({
+            id: courses.id,
+            title: courses.title,
+            updatedAt: courses.updatedAt,
+          })
+          .from(courses)
+          .where(
+            and(eq(courses.teacherId, teacherId), eq(courses.status, "draft")),
+          )
+          .orderBy(desc(courses.updatedAt), desc(courses.id))
+          .limit(3),
+      ]);
+
+      const counts: Record<CourseStatus, number> = {
+        draft: 0,
+        pending_review: 0,
+        published: 0,
+        rejected: 0,
+      };
+
+      for (const row of statusRows) {
+        counts[row.status] = row.courseCount;
+      }
+
+      return {
+        statusCounts: {
+          total: Object.values(counts).reduce(
+            (sum, courseCount) => sum + courseCount,
+            0,
+          ),
+          draft: counts.draft,
+          pendingReview: counts.pending_review,
+          published: counts.published,
+          rejected: counts.rejected,
+        },
+        recentDraftCourses: recentDraftRows.map((course) => ({
+          ...course,
+          status: "draft",
+          updatedAt: course.updatedAt.toISOString(),
+        })),
       };
     },
 

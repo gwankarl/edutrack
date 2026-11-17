@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { teacherCourseListQuerySchema } from "@edutrack/contracts";
 
 import { ApiError } from "../../../lib/api/api-error.js";
 import { useCurrentUser } from "../../auth/hooks/useCurrentUser.js";
@@ -80,12 +81,13 @@ export function useTeacherCourses(filters: TeacherCourseListFilters = {}) {
   const authorizationStatus = getTeacherAccessStatus(currentUser);
   const userId =
     authorizationStatus === "authorized" ? requireTeacherId(currentUser) : null;
+  const parsedFilters = teacherCourseListQuerySchema.parse(filters);
 
   const query = useQuery({
-    queryKey: teacherCourseQueryKeys.list(userId, filters),
+    queryKey: teacherCourseQueryKeys.list(userId, parsedFilters),
     queryFn: () => {
       requireTeacherId(currentUser);
-      return listTeacherCourses(filters);
+      return listTeacherCourses(parsedFilters);
     },
     enabled: userId !== null,
     retry: shouldRetryCourseQuery,

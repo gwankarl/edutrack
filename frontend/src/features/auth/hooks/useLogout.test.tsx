@@ -5,6 +5,7 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { useLogout } from "./useLogout.js";
+import { teacherDashboardSummaryQueryKeys } from "../../teachers/hooks/teacher-dashboard-query-keys.js";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -28,6 +29,9 @@ describe("useLogout", () => {
     queryClient.setQueryData(["auth", "current-user"], {
       id: "cached-user",
     });
+    const dashboardKey =
+      teacherDashboardSummaryQueryKeys.forUser("cached-user");
+    queryClient.setQueryData(dashboardKey, { cached: "dashboard-summary" });
     queryClient.setQueryData(["teacher-applications", "me", "cached-user"], {
       application: {
         id: "cached-application",
@@ -86,5 +90,6 @@ describe("useLogout", () => {
         {},
       ]),
     ).toBeUndefined();
+    expect(queryClient.getQueryData(dashboardKey)).toBeUndefined();
   });
 });

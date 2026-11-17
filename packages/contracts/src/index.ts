@@ -92,24 +92,31 @@ export {
 } from "./catalog/subjects.js";
 
 export {
+  COURSE_SEARCH_MAX_LENGTH,
   COURSE_DESCRIPTION_MAX_LENGTH,
   COURSE_TITLE_MAX_LENGTH,
   TEACHER_COURSE_DEFAULT_PAGE,
   TEACHER_COURSE_DEFAULT_PAGE_SIZE,
   TEACHER_COURSE_MAX_PAGE_SIZE,
   courseStatusSchema,
+  courseThumbnailResponseSchema,
   createTeacherCourseRequestSchema,
   teacherCourseListQuerySchema,
   teacherCourseListResponseSchema,
   teacherCourseParamsSchema,
   teacherCourseResponseSchema,
+  teacherCourseSortSchema,
   updateTeacherCourseRequestSchema,
+  teacherDashboardSummaryResponseSchema,
+  type TeacherDashboardSummaryResponse,
   type CourseStatus,
+  type CourseThumbnailResponse,
   type CreateTeacherCourseRequest,
   type TeacherCourseListQuery,
   type TeacherCourseListResponse,
   type TeacherCourseParams,
   type TeacherCourseResponse,
+  type TeacherCourseSort,
   type UpdateTeacherCourseRequest,
 } from "./courses/courses.js";
 
@@ -133,6 +140,7 @@ export {
 } from "./courses/topics.js";
 
 export {
+  LESSON_CONTENT_MAX_BYTES,
   LESSON_TITLE_MAX_LENGTH,
   createTeacherLessonRequestSchema,
   lessonContentSchema,
@@ -140,11 +148,13 @@ export {
   teacherLessonListResponseSchema,
   teacherLessonResponseSchema,
   teacherTopicLessonCollectionParamsSchema,
+  tiptapLessonDocumentSchema,
   reorderTeacherLessonsRequestSchema,
   updateTeacherLessonRequestSchema,
   type CreateTeacherLessonRequest,
   type ReorderTeacherLessonsRequest,
   type LessonContent,
+  type TiptapLessonDocument,
   type TeacherCourseTopicLessonParams,
   type TeacherLessonListResponse,
   type TeacherLessonResponse,

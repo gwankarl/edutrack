@@ -40,7 +40,7 @@ function Detail({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="min-w-0 space-y-1">
       <dt className="text-sm font-semibold text-foreground">{label}</dt>
-      <dd className="break-words text-sm leading-6 text-muted-foreground">
+      <dd className="wrap-break-word text-sm leading-6 text-muted-foreground">
         {children}
       </dd>
     </div>
@@ -49,38 +49,45 @@ function Detail({ label, children }: { label: string; children: ReactNode }) {
 
 export interface CourseDetailsProps {
   course: TeacherCourseResponse;
+  showIdentity?: boolean;
 }
 
-export default function CourseDetails({ course }: CourseDetailsProps) {
+export default function CourseDetails({
+  course,
+  showIdentity = true,
+}: CourseDetailsProps) {
   const status = statusDetails[course.status];
   const StatusIcon = status.icon;
 
   return (
     <article
-      aria-labelledby="course-details-heading"
+      aria-label={showIdentity ? undefined : "Course details"}
+      aria-labelledby={showIdentity ? "course-details-heading" : undefined}
       className="space-y-6 rounded-lg border border-border bg-surface p-5 sm:p-7"
     >
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-2">
-          <p className="flex items-center gap-2 text-sm font-semibold text-primary">
-            <BookOpen aria-hidden="true" className="size-5" />
-            {course.academicLevel.name} · {course.subject.name}
-          </p>
-          <h2
-            className="text-2xl font-bold text-foreground"
-            id="course-details-heading"
+      {showIdentity && (
+        <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-2">
+            <p className="flex items-center gap-2 text-sm font-semibold text-primary">
+              <BookOpen aria-hidden="true" className="size-5" />
+              {course.academicLevel.name} · {course.subject.name}
+            </p>
+            <h2
+              className="text-2xl font-bold text-foreground"
+              id="course-details-heading"
+            >
+              {course.title}
+            </h2>
+          </div>
+          <span
+            className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-1 text-sm font-semibold ${status.className}`}
+            role="status"
           >
-            {course.title}
-          </h2>
-        </div>
-        <span
-          className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-1 text-sm font-semibold ${status.className}`}
-          role="status"
-        >
-          <StatusIcon aria-hidden="true" className="size-4" />
-          {status.label}
-        </span>
-      </header>
+            <StatusIcon aria-hidden="true" className="size-4" />
+            {status.label}
+          </span>
+        </header>
+      )}
 
       <dl className="grid gap-5 sm:grid-cols-2">
         <Detail label="Description">
@@ -95,7 +102,7 @@ export default function CourseDetails({ course }: CourseDetailsProps) {
         </Detail>
         <Detail label="Academic level">{course.academicLevel.name}</Detail>
         <Detail label="Subject">{course.subject.name}</Detail>
-        <Detail label="Status">{status.label}</Detail>
+        {showIdentity && <Detail label="Status">{status.label}</Detail>}
         <Detail label="Created">
           <time dateTime={course.createdAt}>
             {formatDate(course.createdAt)}
